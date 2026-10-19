@@ -1,0 +1,6 @@
+target-version = "py311"
+
+[lint]
+# Reglas base: errores de sintaxis y pycodestyle (E4, E7, E9) y pyflakes (F).
+# Se fijan explícitas para que el resultado del lint no cambie si se actualiza ruff.
+select = ["E4", "E7", "E9", "F"]

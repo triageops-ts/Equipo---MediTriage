@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: quality
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./backend
+
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v4
+
+      - name: Instalar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+
+      
+      - name: Lint (ruff)
+        run: |
+          pip install "ruff==0.17.1"
+          ruff check .
+
+      
+      - name: Tests con cobertura
+        run: pytest tests/ -v --cov=app --cov-report=term-missing --cov-fail-under=80
+
+      
+      - name: SAST (Semgrep)
+        run: |
+          pip install "semgrep==1.181.0"
+          semgrep scan --config p/python --severity ERROR --error --metrics=off --disable-version-check app
+
+  #----------------------------------------------------------------------
+  # Tarjeta 2
+  #----------------------------------------------------------------------
+  build-and-push:
+    name: build-and-push
+    needs: quality
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pendiente (Tarjeta 2)
+        run: echo "Aquí va el login a GHCR y la publicación de la imagen tagueada por ${{ github.sha }}"
+
+  # ---------------------------------------------------------------------------
+  # Tarjeta 5
+  # -------------------------------------------------------------------------
+  promote:
+    name: promote
+    needs: build-and-push
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pendiente (Tarjeta 5)
+        run: echo "Aquí va la actualización del tag de la imagen en el repo gitops"
