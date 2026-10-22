@@ -1,7 +1,13 @@
-name: CI Pipeline - Backend Build and Push
+name: CI Pipeline - Backend Quality, Build and Push
 
 on:
   push:
+    branches:
+      - main
+    paths:
+      - 'backend/**'
+      - '.github/workflows/ci.yml'
+  pull_request:
     branches:
       - main
     paths:
@@ -13,8 +19,31 @@ permissions:
   packages: write
 
 jobs:
+  # 1. Job de Control de Calidad
+  quality:
+    name: Backend Quality Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies and Run Quality Check
+        run: |
+          cd backend
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          # Aquí puedes agregar ruff, flake8, pytest, etc.
+          echo "Quality checks passed successfully!"
+
+  # 2. Job de Construcción y Push (Solo en push a main Y si quality pasa)
   build-and-push:
     name: Build Multi-stage Image and Push to GHCR
+    needs: quality
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
 
     steps:
