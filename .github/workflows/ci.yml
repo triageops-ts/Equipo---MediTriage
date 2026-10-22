@@ -8,6 +8,11 @@ on:
       - 'backend/**'
       - '.github/workflows/ci.yml'
 
+# Declaración explícita de permisos exigida por la tarea
+permissions:
+  contents: read
+  packages: write
+
 jobs:
   build-and-push:
     name: Build Multi-stage Image and Push to GHCR
@@ -25,7 +30,7 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GHCR_PAT }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Extract Docker metadata
         id: meta
