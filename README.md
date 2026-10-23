@@ -245,3 +245,12 @@ Cambio de réplicas durante la prueba:
 Estado final del namespace (`kubectl get all -n triageops`):
 
 ![kubectl get all](docs/data/evidencia-hpa/get-all.png)
+
+## Promoción a producción
+
+- **Dev:** la promoción es automática. Después de construir y publicar la imagen en GHCR, el workflow actualiza el tag en `overlays/dev/kustomization.yaml` con el SHA del commit y lo envía al repositorio GitOps.
+- **Prod:** la promoción será manual mediante un Pull Request que actualice el tag de `overlays/prod/kustomization.yaml` a una versión previamente validada en Dev.
+- **Revisión:** el Pull Request debe revisarse y aprobarse antes de fusionarse. No se debe promover automáticamente a producción desde cada push a la rama principal.
+- **Verificación:** después de aplicar el cambio, comprobar que Argo CD esté `Synced` y `Healthy` y que el despliegue ejecute la imagen aprobada.
+
+Esta estrategia permite mantener la promoción a producción bajo revisión y conservar un historial auditable de los cambios.
