@@ -74,3 +74,63 @@ jobs:
           tags: ghcr.io/triageops-ts/meditriage-backend:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+        
+  promote:
+    name: Promote Image to GitOps Dev
+    needs: build-and-push
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout GitOps Repository
+        uses: actions/checkout@v4
+        with:
+          repository: triageops-ts/triageops-gitops
+          ref: main
+          token: ${{ secrets.GITOPS_TOKEN }}
+          path: gitops
+
+      - name: Update Dev Image Tag
+        working-directory: gitops
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          python - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          path = Path("overlays/dev/kustomization.yaml")
+          content = path.read_text()
+
+          pattern = r'(?m)^(\s*newTag:\s*)["\']?[^"\'\r\n]+["\']?\s*$'
+          updated, count = re.subn(
+              pattern,
+              lambda m: f'{m.group(1)}"{os.environ["IMAGE_TAG"]}"',
+              content
+          )
+
+          if count != 1:
+              raise SystemExit(
+                  f"Expected exactly one newTag, found {count}"
+              )
+
+          path.write_text(updated)
+          PY
+
+      - name: Commit and Push GitOps Change
+        working-directory: gitops
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add overlays/dev/kustomization.yaml
+
+          if git diff --cached --quiet; then
+            echo "No GitOps changes to commit."
+          else
+            git commit -m "chore(dev): promote ${IMAGE_TAG}"
+            git push origin HEAD:main
+          fi
