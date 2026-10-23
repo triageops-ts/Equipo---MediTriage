@@ -19,7 +19,6 @@ permissions:
   packages: write
 
 jobs:
-  # 1. Job de Control de Calidad
   quality:
     name: Backend Quality Check
     runs-on: ubuntu-latest
@@ -38,7 +37,6 @@ jobs:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           echo "Quality checks passed successfully!"
 
-  # 2. Job de Construcción y Push (Solo corre si quality pasa Y es push a main)
   build-and-push:
     name: Build Multi-stage Image and Push to GHCR
     needs: quality
