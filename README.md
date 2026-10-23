@@ -246,11 +246,26 @@ Estado final del namespace (`kubectl get all -n triageops`):
 
 ![kubectl get all](docs/data/evidencia-hpa/get-all.png)
 
-## Promoción a producción
+**Promoción a producción**
 
-- **Dev:** la promoción es automática. Después de construir y publicar la imagen en GHCR, el workflow actualiza el tag en `overlays/dev/kustomization.yaml` con el SHA del commit y lo envía al repositorio GitOps.
-- **Prod:** la promoción será manual mediante un Pull Request que actualice el tag de `overlays/prod/kustomization.yaml` a una versión previamente validada en Dev.
-- **Revisión:** el Pull Request debe revisarse y aprobarse antes de fusionarse. No se debe promover automáticamente a producción desde cada push a la rama principal.
-- **Verificación:** después de aplicar el cambio, comprobar que Argo CD esté `Synced` y `Healthy` y que el despliegue ejecute la imagen aprobada.
+**Decisión**
 
-Esta estrategia permite mantener la promoción a producción bajo revisión y conservar un historial auditable de los cambios.
+La promoción a producción será manual mediante Pull Request (PR) en el repositorio triageops-ts/triageops-gitops. El pipeline de la aplicación publica la imagen y actualiza automáticamente solo overlays/dev; no debe modificar overlays/prod.
+
+**Procedimiento de promoción**
+1. Confirmar que el workflow de triageops-ts/Equipo---MediTriage terminó correctamente en main y publicó ghcr.io/triageops-ts/meditriage-backend:<commit-sha>.
+2. Confirmar que ese tag quedó actualizado en overlays/dev/kustomization.yaml y que Argo CD para dev está Synced y Healthy.
+3. Crear una rama en triageops-ts/triageops-gitops y cambiar únicamente la versión de la imagen en overlays/prod/kustomization.yaml al mismo <commit-sha> verificado en dev. No usar latest.
+4. Abrir un PR hacia main, enlazando el commit del código y la ejecución verde de CI. Solicitar revisión/aprobación del responsable de producción.
+5. Tras aprobar y mergear el PR, esperar a que Argo CD de producción detecte el cambio. Verificar Synced y Healthy, y confirmar que los pods de producción usan el tag aprobado.
+6. Registrar en el PR la revisión desplegada y cualquier comprobación posterior al despliegue.
+
+**Reversión**
+
+Si la verificación de producción falla, abrir un PR de reversión que restaure en overlays/prod/kustomization.yaml el último tag conocido como bueno. Después de mergear, comprobar que Argo CD vuelve a sincronizar y que los pods ejecutan esa versión.
+
+**Controles**
+- No promover a producción automáticamente desde el job promote de CI.
+- Promover exactamente el SHA que ya fue verificado en dev.
+- Mantener la aprobación humana y el historial del cambio en el PR de GitOps.
+- No guardar tokens ni credenciales en archivos del repositorio.
