@@ -31,6 +31,10 @@ Se adopta un modelo **GitOps basado en el enfoque Pull** mediante **Argo CD**, s
 3. **Estrategia de Promoción (Dev vs. Prod):**
    - **Promoción a Dev:** Automatizada a través del job `promote` en GitHub Actions, el cual actualiza el campo `newTag` en `overlays/dev/kustomization.yaml` con `${{ github.sha }}` mediante el token `GITOPS_TOKEN`. Argo CD detecta el cambio en Git y despliega la nueva versión.
    - **Promoción a Prod:** Controlada manualmente mediante Pull Request (PR) desde la carpeta de `dev` hacia `overlays/prod`.
+  
+4. **Integración con Pipeline de CI y Quality Gates:**
+   - **Quality Gates y Seguridad:** Antes de publicar la imagen en el registro, el pipeline de CI aplica un análisis estático de código con **Semgrep** y validaciones de cobertura.
+   - **Etiquetado Inmutable (SHA):** La imagen de Docker se etiqueta únicamente utilizando el SHA del commit (`${{ github.sha }}`) para garantizar la trazabilidad total e inmutabilidad en el despliegue gestionado por Argo CD.
 
 ## Razones de la decisión
 
