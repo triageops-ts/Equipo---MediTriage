@@ -1,4 +1,4 @@
-# ADR 0005: Estrategia de despliegue continuo con GitOps (Argo CD)
+# ADR 0004: Estrategia de despliegue continuo con GitOps (Argo CD)
 
 ## Fecha
 23/10/26
