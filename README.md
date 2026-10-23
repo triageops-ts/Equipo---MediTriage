@@ -269,3 +269,24 @@ Si la verificación de producción falla, abrir un PR de reversión que restaure
 - Promover exactamente el SHA que ya fue verificado en dev.
 - Mantener la aprobación humana y el historial del cambio en el PR de GitOps.
 - No guardar tokens ni credenciales en archivos del repositorio.
+
+  ---
+
+## 📸 Evidencia de Integración Continua y GitOps 
+
+A continuación se presenta la evidencia del cumplimiento de los requisitos de GitOps, CI/CD y despliegue automatizado con Argo CD:
+
+### 1. Flujo de CI Exitoso (`ci.yml`)
+El flujo de Integración Continua en GitHub Actions ejecuta las pruebas y compilaciones correctamente en la rama `main`.
+![CI Pipeline Verde](docs/01-ci-pipeline.png)
+
+### 2. Estructura del Repositorio GitOps
+El repositorio `triageops-gitops` cuenta con la estructura clara de manifiestos Kustomize dividida en carpetas `base/` y `overlays/{dev,prod}`.
+![Estructura GitOps](docs/02-gitops-structure.png)
+
+### 3. Registro de Decisión de Arquitectura (ADR)
+Documentación formal de la decisión de arquitectura adoptada para la implementación de GitOps y Argo CD.
+![Registro ADR](docs/03-adr-gitops.png)
+
+### 4. Estado del Despliegue en Argo CD (Healthy & Synced)
+![Argo CD Healthy and Synced](docs/04-argocd-healthy.png)
