@@ -1,0 +1,35 @@
+# ADR 0002: Definición de Requisitos Funcionales, No Funcionales y Alcance del MVP para MediTriage
+
+## Estado
+* **Estado:** Aprobado / En curso
+
+## Contexto
+MediTriage es una plataforma de triage clínico asistido por IA diseñada para la red de centros de atención primaria con el objetivo de reducir los tiempos de espera en urgencias. La solución debe priorizar pacientes basándose en síntomas reportados, historia clínica y signos vitales, manteniendo un estricto apego al marco legal chileno de protección de datos personales y sensibles (Ley 19.628 y Ley 21.719).
+
+## Decisión
+Se establece formalmente el alcance inicial del **MVP (Producto Mínimo Viable)** y las **Restricciones de Ingeniería** que regirán el diseño arquitectónico de los componentes (FastAPI, PostgreSQL, Redis, despliegue en contenedores):
+
+### 1. Alcance Funcional del MVP
+* **Registro de Pacientes:** Validación de identidad mediante RUT chileno y gestión de consentimiento informado.
+* **Captura de Datos Clínicos:** Formulario estructurado de síntomas y signos vitales.
+* **Motor de IA (Asistencia de Triage):** Sugerencia automatizada de categoría ESI (Escala de Triage Australiana/Estándar, de 1 a 5) respaldada por un mecanismo de explicabilidad del porqué de la priorización.
+* **Tablero Clínico:** Interfaz dinámica para el personal médico orientada a la priorización de atención.
+* **Trazabilidad:** Registro y *audit log* completo de cada recomendación emitida por el modelo de IA.
+
+### 2. Requisitos No Funcionales y Restricciones de Ingeniería
+* **Datos Sensibles:** Cifrado obligatorio en reposo y en tránsito; enmascaramiento estricto de información de identificación personal (PII) en los registros de logs del sistema. Cumplimiento de la Ley 19.628 y Ley 21.719.
+* **Explicabilidad:** El motor de IA debe proporcionar una justificación clara y trazable para cada nivel de priorización asignado.
+* **Alta Disponibilidad:** Se apunta a una disponibilidad mensual del 99.5%, evitando caídas críticas de infraestructura durante la franja horaria diurna de mayor afluencia.
+* **Auditoría e Inmutabilidad:** Las decisiones tomadas por el sistema de IA deben quedar almacenadas de forma segura e inmutable por un periodo normativo de 5 años.
+* **Rendimiento y Latencia:** El tiempo de respuesta del motor de triage debe ser inferior a 3 segundos medidos desde el envío del formulario clínico.
+
+### 3. Usuarios Objetivo
+El sistema interactuará con los siguientes roles clave:
+* **Paciente** (ingreso de datos y consentimiento).
+* **Enfermera de Triage** (evaluación inicial).
+* **Médico jefe de turno** (supervisión y atención en tablero).
+* **Auditor clínico** (revisión de trazabilidad e histórico).
+
+## Consecuencias
+* **Positivas:** Permite al equipo alinear el desarrollo backend (FastAPI, base de datos) y la integración de IA (como el uso de APIs o modelos locales) directamente con los criterios de aceptación del negocio y restricciones legales chilenas.
+* **Negativas / Desafíos:** Exige un esfuerzo estricto en la sanitización de logs (evitar filtración de PII) y en la implementación de esquemas de auditoría inmutables dentro de la arquitectura de contenedores planificada.
