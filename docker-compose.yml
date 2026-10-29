@@ -11,11 +11,9 @@ services:
     volumes:
       - ./backend:/app
     environment:
-      - DATABASE_URL=postgresql://meditriage_user:meditriage_pass@db:5432/meditriage_db?sslmode=require
+      - DATABASE_URL=${DATABASE_URL}
+      - APP_ENCRYPTION_KEY=${APP_ENCRYPTION_KEY}
       - PORT=8000
-    depends_on:
-      - db
-      - redis
 
   db:
     image: postgres:16-alpine
