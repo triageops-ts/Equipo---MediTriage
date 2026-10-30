@@ -344,6 +344,10 @@ components:
         has_consent:
           type: boolean
           example: true
+        consent_version:
+          type: string
+          description: Versión del texto de consentimiento que el paciente aceptó. Se guarda en la tabla consentimiento junto con la fecha de aceptación. Si se omite se usa la versión vigente.
+          example: "1.0"
 
     # Vista de paciente SIN PII, para no exponer datos innecesarios dentro de un Triage
     PatientSummary:
@@ -717,4 +721,3 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      
