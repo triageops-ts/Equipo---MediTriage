@@ -28,6 +28,10 @@ COPY --from=builder /install/lib/python3.11/site-packages /site-packages
 # Copiar el código fuente asegurando permisos para el usuario nonroot
 COPY --chown=nonroot:nonroot app ./app
 
+# Alembic (migraciones de base de datos)
+COPY --chown=nonroot:nonroot alembic.ini ./alembic.ini
+COPY --chown=nonroot:nonroot migrations ./migrations
+
 # Factor 07: Puerto por defecto 8000 y rutas de importación de Python
 ENV PORT=8000
 ENV PYTHONPATH="/site-packages:/app"
