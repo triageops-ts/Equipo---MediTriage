@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: meditriage-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - APP_ENCRYPTION_KEY=${APP_ENCRYPTION_KEY}
+      - PORT=8000
+
+  db:
+    image: postgres:16-alpine
+    container_name: meditriage-db
+    restart: always
+    environment:
+      POSTGRES_USER: meditriage_user
+      POSTGRES_PASSWORD: meditriage_pass
+      POSTGRES_DB: meditriage_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  redis:
+    image: redis:7-alpine
+    container_name: meditriage-redis
+    restart: always
+    ports:
+      - "6379:6379"
+
+volumes:
+  postgres_data:

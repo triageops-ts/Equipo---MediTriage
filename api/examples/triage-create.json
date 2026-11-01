@@ -1,0 +1,21 @@
+
+{
+  "patient_id": "550e8400-e29b-41d4-a716-446655440000",
+  "symptoms": {
+    "presion_sistolica": 120,
+    "presion_diastolica": 80,
+    "frecuencia_cardiaca": 90,
+    "frecuencia_respiratoria": 18,
+    "temperatura": 37.0,
+    "saturacion_oxigeno": 98,
+    "escala_dolor": 3,
+    "nivel_conciencia": "Alerta",
+    "sintomas": [
+      {
+        "codigo_sintoma": "SINT-034",
+        "severidad": "moderada",
+        "tiempo_evolucion_horas": 2
+      }
+    ]
+  }
+}

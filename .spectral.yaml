@@ -1,0 +1,25 @@
+extends: ["spectral:oas"]
+
+rules:
+  operation-description:
+    description: Cada endpoint debe tener una descripción clara.
+    given: $.paths.*[get,post,put,delete,patch]
+    then:
+      field: description
+      function: truthy
+
+  operation-operationId:
+    description: Toda operación debe definir un operationId único.
+    given: $.paths.*[get,post,put,delete,patch]
+    then:
+      field: operationId
+      function: truthy
+
+  operation-error-response:
+    description: Las operaciones deben definir respuestas de error (ej. 400, 404, 422, 500).
+    given: $.paths.*[get,post,put,delete,patch].responses
+    then:
+      field: "@key"
+      function: pattern
+      functionOptions:
+        match: "^[45][0-9]{2}$"

@@ -1,6 +1,6 @@
 # ADR 0002 - Estilo arquitectonico elegido: Monolito modular (arquitectura en capas)
 ---
-# Fecha
+## Fecha
 03/09/26
 
 ## Autores

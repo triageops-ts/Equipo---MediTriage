@@ -1,0 +1,6 @@
+NAME                                                         REFERENCE                       TARGETS       MINPODS   MAXPODS   REPLICAS   AGE
+horizontalpodautoscaler.autoscaling/meditriage-backend-hpa   Deployment/meditriage-backend   cpu: 1%/50%   2         10        2          92m
+
+NAME                                     READY   STATUS    RESTARTS   AGE
+pod/meditriage-backend-9f6566b85-qp2hd   1/1     Running   0          23m
+pod/meditriage-backend-9f6566b85-r4lbt   1/1     Running   0          27m

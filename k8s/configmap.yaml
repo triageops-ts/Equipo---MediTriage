@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: meditriage-backend-config
+  namespace: triageops
+  labels:
+    app: meditriage-backend
+    part-of: meditriage
+    tier: backend
+data:
+  PORT: "8000"
+  LOG_LEVEL: "info"
+  ENVIRONMENT: "production"

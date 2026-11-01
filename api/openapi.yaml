@@ -1,0 +1,723 @@
+openapi: 3.0.3
+info:
+  title: MediTriage API
+  description: API RESTful principal para el sistema de priorización de pacientes y asistencia clínica mediante IA.
+  version: 1.0.0
+  contact:
+    name: Equipo MediTriage
+
+servers:
+  - url: http://localhost:8000/api/v1
+    description: Servidor Local (Desarrollo)
+  - url: https://api.meditriage.com/v1
+    description: Servidor de Producción
+
+security:
+  - BearerAuth: []
+
+tags:
+  - name: Pacientes
+    description: Gestión de pacientes en admisión y sala de espera.
+  - name: Triages
+    description: Creación de evaluaciones, IA y actualización de estados.
+  - name: Auditoría
+    description: Trazabilidad y logs inmutables de decisiones médicas.
+
+paths:
+  /patients:
+    post:
+      tags:
+        - Pacientes
+      summary: Registra un nuevo paciente
+      description: Crea un paciente en admisión. Requiere consentimiento informado y acepta Idempotency-Key para reintentos seguros
+      operationId: createPatient
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatientInput'
+            examples:
+              PatientCreate:
+                $ref: '#/components/examples/PatientCreate'
+      responses:
+        '201':
+          description: Paciente creado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Patient'
+              example:
+                patient_id: "550e8400-e29b-41d4-a716-446655440000"
+                rut: "11.111.111-1"
+                name: "Juan Perez"
+                birth_date: "1990-05-15"
+                biological_sex: "male"
+                has_consent: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+    get:
+      tags:
+        - Pacientes
+      summary: Obtiene la lista de pacientes
+      description: Devuelve la lista de pacientes
+      operationId: listPatients
+      parameters:
+        - name: skip
+          in: query
+          description: Paginación - registros a saltar
+          schema:
+            type: integer
+            default: 0
+        - name: limit
+          in: query
+          description: Paginación - límite de registros
+          schema:
+            type: integer
+            default: 20
+        - name: rut
+          in: query
+          schema:
+            type: string
+        - name: name
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lista de pacientes devuelta con éxito
+
+  /triages:
+    post:
+      tags:
+        - Triages
+      summary: Crea una evaluación de triage y consulta IA
+      description: Crea una evaluación de triage con los signos vitales y síntomas, y pide a la IA un nivel ESI sugerido con su justificación
+      operationId: createTriage
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TriageInput'
+            examples:
+              TriageCreate:
+                $ref: '#/components/examples/TriageCreate'
+      responses:
+        '201':
+          description: Triage creado y evaluado por IA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Triage'
+              example:
+                triage_id: "660e8400-e29b-41d4-a716-446655440001"
+                patient:
+                  patient_id: "550e8400-e29b-41d4-a716-446655440000"
+                  age: 36
+                  biological_sex: male
+                status: waiting
+                symptoms:
+                  presion_sistolica: 120
+                  presion_diastolica: 80
+                  frecuencia_cardiaca: 90
+                  frecuencia_respiratoria: 18
+                  temperatura: 37.0
+                  saturacion_oxigeno: 98
+                  escala_dolor: 3
+                  nivel_conciencia: Alerta
+                  sintomas:
+                    - codigo_sintoma: "SINT-034"
+                      severidad: moderada
+                      tiempo_evolucion_horas: 2
+                ai_recommendation:
+                  nivel_esi_sugerido: 3
+                  justificacion_ia: "Signos vitales estables y síntomas de severidad moderada."
+                  modelo_usado: "claude-3-haiku"
+                  tiempo_respuesta: "2026-10-01T12:00:00Z"
+                final_esi_level: null
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    get:
+      tags:
+        - Triages
+      summary: Lista de triages activos (Tablero Médico)
+      description: Devuelve los triages activos para el tablero médico
+      operationId: listTriages
+      parameters:
+        - name: skip
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [waiting, attending, discharged]
+        - name: esi_level
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 5
+        - name: sort
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lista de triages priorizados
+
+  /triages/{triage_id}:
+    patch:
+      tags:
+        - Triages
+      summary: Actualiza el estado de flujo del paciente
+      description: Cambia el estado del paciente en el flujo de atención
+      operationId: updateTriageStatus
+      parameters:
+        - name: triage_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Estado actualizado exitosamente
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /triages/{triage_id}/overrides:
+    post:
+      tags:
+        - Triages
+      summary: Sobrescribe el nivel ESI sugerido por la IA
+      description: Permite al personal médico reemplazar el nivel ESI sugerido por la IA, indicando una justificación clínica. Queda registrado en la auditoría
+      operationId: overrideTriageEsi
+      parameters:
+        - name: triage_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '201':
+          description: Sobrescritura registrada exitosamente
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /audit-logs:
+    get:
+      tags:
+        - Auditoría
+      summary: Obtiene el historial inmutable de discrepancias
+      description: Devuelve el historial de auditoría con filtros por discrepancia
+      operationId: listAuditLogs
+      parameters:
+        - name: skip
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: has_discrepancy
+          in: query
+          schema:
+            type: boolean
+        - name: user_id
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Historial de auditoría devuelto
+        '403':
+          description: Permisos insuficientes (requiere rol de auditor)
+
+components:
+  schemas:
+    NivelConciencia:
+      type: string
+      enum: [alerta, verbal, dolor, inconsciente]
+    EsiLevel:
+      type: integer
+      minimum: 1
+      maximum: 5
+    TriageStatus:
+      type: string
+      enum: [waiting, attending, discharged]
+    Patient:
+      type: object
+      required: [patient_id, rut, name]
+      properties:
+        patient_id:
+          type: string
+          format: uuid
+          readOnly: true
+        rut:
+          type: string
+          example: "11.111.111-1"
+          x-pii: true
+        name:
+          type: string
+          example: "Juan Pérez"
+          x-pii: true
+        birth_date:
+          type: string
+          format: date
+          x-sensitivity: quasi-identifier
+          description: Nunca se envía tal cual a la IA; solo se deriva la edad.
+        biological_sex:
+          type: string
+          enum: [male, female]
+        address:
+          type: string
+          x-pii: true
+        phone:
+          type: string
+          x-pii: true
+        email:
+          type: string
+          format: email
+          x-pii: true
+        has_consent:
+          type: boolean
+          example: true
+
+    PatientInput:
+      type: object
+      description: Body de POST /patients. has_consent debe ser true (consentimiento informado firmado antes de registrar).
+      required: [rut, name, has_consent]
+      properties:
+        rut:
+          type: string
+          example: "11.111.111-1"
+          x-pii: true
+        name:
+          type: string
+          example: "Juan Pérez"
+          x-pii: true
+        birth_date:
+          type: string
+          format: date
+          x-sensitivity: quasi-identifier
+        biological_sex:
+          type: string
+          enum: [male, female]
+        address:
+          type: string
+          x-pii: true
+        phone:
+          type: string
+          x-pii: true
+        email:
+          type: string
+          format: email
+          x-pii: true
+        has_consent:
+          type: boolean
+          example: true
+        consent_version:
+          type: string
+          description: Versión del texto de consentimiento que el paciente aceptó. Se guarda en la tabla consentimiento junto con la fecha de aceptación. Si se omite se usa la versión vigente.
+          example: "1.0"
+
+    # Vista de paciente SIN PII, para no exponer datos innecesarios dentro de un Triage
+    PatientSummary:
+      type: object
+      description: Subconjunto seguro del paciente — lo único que necesita un Triage o el motor de IA.
+      required: [patient_id, age, biological_sex]
+      properties:
+        patient_id:
+          type: string
+          format: uuid
+          readOnly: true
+        age:
+          type: integer
+          minimum: 0
+          maximum: 130
+          description: Edad derivada de birth_date. Nunca se expone la fecha exacta aquí.
+        biological_sex:
+          type: string
+          enum: [male, female]
+
+    # ---------- Schema base de INPUT ----------
+    SintomaInput:
+      type: object
+      required: [codigo_sintoma, severidad]
+      properties:
+        codigo_sintoma:
+          type: string
+          description: Código de un catálogo predefinido (interno o SNOMED CT/CIE-10).
+          example: "SINT-034"
+        severidad:
+          type: string
+          enum: [leve, moderada, severa]
+        tiempo_evolucion_horas:
+          type: integer
+          minimum: 0
+
+    SymptomsInput:
+      type: object
+      description: Schema base de INPUT para crear un triage. Solo datos clínicos.
+      required:
+        - presion_sistolica
+        - presion_diastolica
+        - frecuencia_cardiaca
+        - frecuencia_respiratoria
+        - temperatura
+        - saturacion_oxigeno
+        - escala_dolor
+        - nivel_conciencia
+      properties:
+        presion_sistolica: { type: integer, minimum: 40, maximum: 260, description: "mmHg" }
+        presion_diastolica: { type: integer, minimum: 20, maximum: 200, description: "mmHg" }
+        frecuencia_cardiaca: { type: integer, minimum: 20, maximum: 300, description: "bpm" }
+        frecuencia_respiratoria: { type: integer, minimum: 5, maximum: 80, description: "rpm" }
+        temperatura: { type: number, format: float, minimum: 30, maximum: 43, description: "°C" }
+        saturacion_oxigeno: { type: integer, minimum: 0, maximum: 100, description: "%" }
+        escala_dolor: { type: integer, minimum: 0, maximum: 10 }
+        nivel_conciencia:
+          $ref: '#/components/schemas/NivelConciencia'
+        sintomas:
+          type: array
+          items:
+            $ref: '#/components/schemas/SintomaInput'
+        antecedentes_relevantes_codificados:
+          type: object
+          description: 'Mapa de antecedentes codificados como booleanos (ej. {"diabetes": true}). Nunca texto libre.'
+          additionalProperties:
+            type: boolean
+
+    # ---------- Schema base de OUTPUT ----------
+    TriageRecommendation:
+      type: object
+      description: Schema base de OUTPUT devuelto por el motor de IA (Claude 3 Haiku).
+      required: [nivel_esi_sugerido, justificacion_ia]
+      properties:
+        nivel_esi_sugerido:
+          $ref: '#/components/schemas/EsiLevel'
+        justificacion_ia:
+          type: string
+          minLength: 10
+          description: Explicación clínica obligatoria de por qué se sugiere ese nivel.
+        modelo_usado:
+          type: string
+          default: claude-3-haiku
+          readOnly: true
+        tiempo_respuesta:
+          type: string
+          format: date-time
+          readOnly: true
+
+    # ---------- Triage ----------
+    Triage:
+      type: object
+      required: [triage_id, patient, status, symptoms, ai_recommendation]
+      properties:
+        triage_id:
+          type: string
+          format: uuid
+          readOnly: true
+        patient:
+          $ref: '#/components/schemas/PatientSummary'
+        status:
+          $ref: '#/components/schemas/TriageStatus'
+        symptoms:
+          $ref: '#/components/schemas/SymptomsInput'
+        ai_recommendation:
+          $ref: '#/components/schemas/TriageRecommendation'
+        final_esi_level:
+          allOf:
+            - $ref: '#/components/schemas/EsiLevel'
+          nullable: true
+          description: Nivel definitivo tras confirmación u override. Nulo mientras está pendiente.
+
+    TriageInput:
+      type: object
+      required: [patient_id, symptoms]
+      properties:
+        patient_id:
+          type: string
+          format: uuid
+          description: Referencia al paciente. No es PII por sí sola.
+        symptoms:
+          $ref: '#/components/schemas/SymptomsInput'
+
+    TriageStatusUpdate:
+      type: object
+      required: [status]
+      properties:
+        status:
+          $ref: '#/components/schemas/TriageStatus'
+
+    # TriageOverride ya existía (definido por el equipo) — se deja tal cual, sin duplicar con un schema nuevo.
+    TriageOverride:
+      type: object
+      required:
+        - new_esi_level
+        - justification
+      properties:
+        new_esi_level:
+          type: integer
+          example: 2
+        justification:
+          type: string
+          example: "Paciente presenta dificultad respiratoria severa no captada en triage inicial."
+
+    # ---------- Auditoría ----------
+    AuditLogEntry:
+      type: object
+      required: [log_id, event_type, entity, timestamp]
+      properties:
+        log_id:
+          type: string
+          format: uuid
+          readOnly: true
+        event_type:
+          type: string
+          enum:
+            - creacion_episodio
+            - registro_signos_vitales
+            - solicitud_clasificacion_ia
+            - decision_sobrescrita
+            - acceso_dashboard_auditoria
+            - consentimiento_otorgado
+        entity:
+          type: string
+        entity_id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        has_discrepancy:
+          type: boolean
+        timestamp:
+          type: string
+          format: date-time
+          readOnly: true
+
+    # Formato de error estándar RFC 7807 (Problem Details for HTTP APIs)
+    Problem:
+      type: object
+      description: >
+        Detalle de un error según RFC 7807. Se devuelve con el content type
+        `application/problem+json`. No debe incluir datos personales (PII) del paciente.
+      required:
+        - title
+        - status
+      properties:
+        type:
+          type: string
+          format: uri-reference
+          description: URI que identifica el tipo de problema. Si no hay una específica, se usa `about:blank`.
+          default: "about:blank"
+          example: "https://api.meditriage.com/problems/validation-error"
+        title:
+          type: string
+          description: Resumen corto y legible del problema, igual para todas las ocurrencias del mismo tipo.
+          example: "Error de validación"
+        status:
+          type: integer
+          description: Código de estado HTTP de esta respuesta.
+          minimum: 400
+          maximum: 599
+          example: 422
+        detail:
+          type: string
+          description: Explicación específica de esta ocurrencia del problema.
+          example: "El campo heart_rate debe estar entre 20 y 300."
+        instance:
+          type: string
+          format: uri-reference
+          description: URI que identifica esta ocurrencia concreta del problema.
+          example: "/api/v1/triages"
+        errors:
+          type: array
+          description: Extensión opcional. Lista de errores por campo, usada en errores de validación.
+          items:
+            type: object
+            required:
+              - field
+              - message
+            properties:
+              field:
+                type: string
+                example: "vital_signs.heart_rate"
+              message:
+                type: string
+                example: "Debe estar entre 20 y 300."
+
+  responses:
+    NotFound:
+      description: El recurso solicitado no fue encontrado.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          example:
+            type: "https://api.meditriage.com/problems/not-found"
+            title: "Recurso no encontrado"
+            status: 404
+            detail: "No existe una evaluación de triage con el id indicado."
+            instance: "/api/v1/triages/abc123"
+    Unauthorized:
+      description: Token JWT faltante, inválido o expirado.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          example:
+            type: "https://api.meditriage.com/problems/unauthorized"
+            title: "No autenticado"
+            status: 401
+            detail: "El token de acceso falta o no es válido."
+            instance: "/api/v1/triages"
+    ValidationError:
+      description: Los datos enviados tienen el formato correcto pero no cumplen las reglas de validación.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          examples:
+            ValidationError422:
+              $ref: '#/components/examples/ValidationError422'
+    InternalServerError:
+      description: Error inesperado del servidor. No expone detalles internos ni datos personales.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          example:
+            type: "https://api.meditriage.com/problems/internal-error"
+            title: "Error interno del servidor"
+            status: 500
+            detail: "Ocurrió un error inesperado. Intenta nuevamente más tarde."
+            instance: "/api/v1/triages"
+    Conflict:
+      description: >
+        Conflicto con el estado actual del recurso. Ocurre cuando el recurso ya existe
+        (por ejemplo, un paciente con el mismo RUT) o cuando se reutiliza un
+        `Idempotency-Key` con un cuerpo distinto al de la solicitud original, o mientras
+        la solicitud original con esa clave sigue en proceso.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          example:
+            type: "https://api.meditriage.com/problems/conflict"
+            title: "Conflicto"
+            status: 409
+            detail: "El Idempotency-Key ya fue usado con una solicitud distinta."
+            instance: "/api/v1/patients"
+    Forbidden:
+      description: El usuario está autenticado pero no tiene permisos suficientes (por ejemplo, se requiere rol de auditor).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          example:
+            type: "https://api.meditriage.com/problems/forbidden"
+            title: "Permisos insuficientes"
+            status: 403
+            detail: "Este recurso requiere el rol de auditor."
+            instance: "/api/v1/audit-logs"
+    BadRequest:
+      description: La solicitud está mal formada (JSON inválido, parámetros de query o de ruta incorrectos).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          example:
+            type: "https://api.meditriage.com/problems/bad-request"
+            title: "Solicitud inválida"
+            status: 400
+            detail: "El parámetro 'limit' debe ser un entero mayor o igual a 1."
+            instance: "/api/v1/patients"
+
+  parameters:
+    SkipParam:
+      name: skip
+      in: query
+      description: Cantidad de registros a saltar (paginación).
+      required: false
+      schema:
+        type: integer
+        default: 0
+    LimitParam:
+      name: limit
+      in: query
+      description: Cantidad máxima de registros a devolver.
+      required: false
+      schema:
+        type: integer
+        default: 20
+    TriageIdParam:
+      name: triage_id
+      in: path
+      description: ID único de la evaluación de triage.
+      required: true
+      schema:
+        type: string
+    IdempotencyKeyHeader:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: >
+        Clave única (UUID v4) generada por el cliente para que un POST pueda reintentarse
+        sin duplicar el efecto. Si se repite la misma clave con el mismo cuerpo, el servidor
+        devuelve la respuesta de la solicitud original sin volver a ejecutarla. Si se repite
+        con un cuerpo distinto, o mientras la original sigue en proceso, responde 409.
+        Las claves se conservan 24 horas.
+      schema:
+        type: string
+        format: uuid
+        example: "3f8a6c1e-5b7d-4e2a-9c41-2d8f0a7b6e13"
+  
+  examples:
+    PatientCreate:
+      summary: Ejemplo de registro de paciente
+      externalValue: './examples/patient-create.json'
+
+    TriageCreate:
+      summary: Ejemplo de creación de triage
+      externalValue: './examples/triage-create.json'
+
+    ValidationError422:
+      summary: Ejemplo de error de validación
+      externalValue: './examples/validation-error-422.json'
+
+  securitySchemes:
+    # Método de autenticación para el Login de FastAPI
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
