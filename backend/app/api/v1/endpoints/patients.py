@@ -1,3 +1,4 @@
+import logging
 import uuid
 
 import psycopg
@@ -9,6 +10,7 @@ from app.db import encryption_key, get_conn
 from app.schemas.patient import Patient, PatientInput
 
 router = APIRouter()
+logger = logging.getLogger("meditriage.patients")
 
 _SEXO_A_DB = {"male": "masculino", "female": "femenino"}
 
@@ -72,6 +74,7 @@ def create_patient(data: PatientInput, conn: psycopg.Connection = Depends(get_co
             cur.execute(_LOCK_RUT, {"rut": rut_formateado})
             cur.execute(_EXISTE_RUT, {"rut": rut_formateado, "key": key})
             if cur.fetchone():
+                logger.warning("patient_create_conflict")  # sin RUT
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
                     detail=f"Ya existe un paciente registrado con el RUT {rut_formateado}.",
@@ -112,6 +115,15 @@ def create_patient(data: PatientInput, conn: psycopg.Connection = Depends(get_co
             )
             fecha_aceptacion = cur.fetchone()[0]
 
+    # Solo ids opacos y banderas: nada de nombre, RUT ni datos de contacto.
+    logger.info(
+        "patient_created",
+        extra={
+            "patient_id": str(paciente_id),
+            "consent_version": data.consent_version,
+            "has_contact_data": bool(data.address or data.phone or data.email),
+        },
+    )
     return Patient(
         patient_id=paciente_id,
         rut=rut_formateado,
