@@ -2,7 +2,7 @@ import React from "react";
 
 interface AnamnesisPainProps {
   anamnesis: string;
-  escala_dolor: number;
+  escala_dolor: number | null;
   onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
   onPainChange: (value: number) => void;
 }
@@ -30,8 +30,8 @@ export const AnamnesisPainCard = ({
       <span className="font-bold text-sm min-w-[120px]">
         Escala de Dolor:
       </span>
-      <div className="flex-1 grid grid-cols-10 gap-1.5 max-w-[650px]">
-        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => {
+      <div className="flex-1 grid grid-cols-11 gap-1.5 max-w-[650px]">
+        {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => {
           const isSelected = escala_dolor === num;
           return (
             <button
