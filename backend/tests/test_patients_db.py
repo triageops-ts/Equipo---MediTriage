@@ -52,3 +52,23 @@ def test_rut_invalido_422_con_mensaje():
     assert r.status_code == 422
     err = r.json()["errors"][0]
     assert err["field"] == "rut" and "dígito verificador" in err["message"]
+
+
+def test_buscar_por_rut():
+    rut = _rut_unico()
+    client.post("/api/v1/patients", json={"rut": rut, "name": "Ana Soto", "has_consent": True})
+    r = client.get("/api/v1/patients", params={"rut": rut})
+    assert r.status_code == 200
+    assert r.json()[0]["name"] == "Ana Soto"
+    assert r.json()[0]["rut"] == rut
+
+
+def test_buscar_rut_inexistente_devuelve_lista_vacia():
+    r = client.get("/api/v1/patients", params={"rut": _rut_unico()})
+    assert r.status_code == 200
+    assert r.json() == []
+
+
+def test_buscar_rut_invalido_422():
+    r = client.get("/api/v1/patients", params={"rut": "11.111.111-2"})
+    assert r.status_code == 422

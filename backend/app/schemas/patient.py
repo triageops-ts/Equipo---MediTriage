@@ -74,3 +74,12 @@ class Patient(BaseModel):
     consent_id: UUID
     consent_version: str
     consent_accepted_at: datetime
+
+class PatientFound(BaseModel):
+    """Resultado de buscar un paciente por RUT (GET /patients?rut=...)."""
+
+    patient_id: UUID
+    rut: str  # formateado: 11.111.111-1
+    name: str
+    birth_date: Optional[date] = None
+    biological_sex: Optional[Literal["male", "female"]] = None

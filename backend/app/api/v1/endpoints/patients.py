@@ -2,12 +2,12 @@ import logging
 import uuid
 
 import psycopg
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.core.consent import CONSENT_TIPO
-from app.core.rut import formatear_rut
+from app.core.rut import RutInvalido, formatear_rut, normalizar_rut
 from app.db import encryption_key, get_conn
-from app.schemas.patient import Patient, PatientInput
+from app.schemas.patient import Patient, PatientFound, PatientInput
 
 router = APIRouter()
 logger = logging.getLogger("meditriage.patients")
@@ -135,3 +135,45 @@ def create_patient(data: PatientInput, conn: psycopg.Connection = Depends(get_co
         consent_version=data.consent_version,
         consent_accepted_at=fecha_aceptacion,
     )
+
+_SEXO_A_API = {"masculino": "male", "femenino": "female"}
+
+_BUSCAR_POR_RUT = """
+    SELECT paciente_id, nombre_completo, fecha_nacimiento, sexo_biologico
+    FROM paciente
+    WHERE pgp_sym_decrypt(rut, %(key)s::text) = %(rut)s::text
+    LIMIT 1
+"""
+
+
+@router.get(
+    "/patients",
+    response_model=list[PatientFound],
+    tags=["Pacientes"],
+    summary="Busca un paciente por RUT",
+)
+def list_patients(
+    rut: str = Query(..., description="RUT del paciente, con o sin puntos y guion."),
+    conn: psycopg.Connection = Depends(get_conn),
+):
+    try:
+        rut_formateado = formatear_rut(normalizar_rut(rut))
+    except RutInvalido as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
+        ) from None
+
+    with conn.cursor() as cur:
+        cur.execute(_BUSCAR_POR_RUT, {"rut": rut_formateado, "key": encryption_key()})
+        filas = cur.fetchall()
+
+    return [
+        PatientFound(
+            patient_id=paciente_id,
+            rut=rut_formateado,
+            name=nombre,
+            birth_date=fecha_nacimiento,
+            biological_sex=_SEXO_A_API.get(sexo),
+        )
+        for paciente_id, nombre, fecha_nacimiento, sexo in filas
+    ]
