@@ -4,81 +4,83 @@ import React, { useState } from "react";
 import { Navbar } from "@/components/clinical/Navbar";
 import { VitalSignsCard } from "@/components/clinical/VitalSignsCard";
 import { AIAssistantCard } from "@/components/clinical/AIAssistantCard";
+import { PatientLookupCard } from "@/components/clinical/PatientLookupCard";
 import { PatientDataCard } from "@/components/clinical/PatientDataCard";
 import { AnamnesisPainCard } from "@/components/clinical/AnamnesisPainCard";
+import {
+  ApiError,
+  enviarFormulario,
+  type ErrorCampo,
+  type FormularioClinicoRespuesta,
+  type NivelConciencia,
+  type PacienteEncontrado,
+} from "@/lib/api";
 
-interface ClinicalFormData {
-  rut: string;
-  nombre: string;
+// Los signos vitales se guardan como texto para distinguir "vacío" de 0.
+interface FormState {
   alergias: string;
-  edad: number;
-  hora_llegada: string;
-  sexo: string;
-  nivel_conciencia: string;
-  presion_arterial: string;
-  frecuencia_cardiaca: number;
-  frecuencia_respiratoria: number;
-  saturacion_o2: number;
-  temperatura: number;
+  nivel_conciencia: NivelConciencia | "";
+  presion_sistolica: string;
+  presion_diastolica: string;
+  frecuencia_cardiaca: string;
+  frecuencia_respiratoria: string;
+  saturacion_oxigeno: string;
+  temperatura: string;
   anamnesis: string;
-  escala_dolor: number;
+  escala_dolor: number | null;
 }
 
+const FORM_VACIO: FormState = {
+  alergias: "",
+  nivel_conciencia: "",
+  presion_sistolica: "",
+  presion_diastolica: "",
+  frecuencia_cardiaca: "",
+  frecuencia_respiratoria: "",
+  saturacion_oxigeno: "",
+  temperatura: "",
+  anamnesis: "",
+  escala_dolor: null,
+};
+
+const MAX_MOTIVO = 1000; // límite del backend para motivo_consulta
+
+const aNumero = (texto: string): number => (texto.trim() === "" ? NaN : Number(texto));
+
 export default function NurseTriagePage() {
-  const [formData, setFormData] = useState<ClinicalFormData>({
-    rut: "11.111.111-1",
-    nombre: "Juan Carlos Pérez",
-    alergias: "Lorem Ipsum es simplemente el texto de relleno de las imprentas y archivos.",
-    edad: 20,
-    hora_llegada: "18:35",
-    sexo: "Masculino",
-    nivel_conciencia: "Alerta",
-    presion_arterial: "145/95",
-    frecuencia_cardiaca: 112,
-    frecuencia_respiratoria: 22,
-    saturacion_o2: 91,
-    temperatura: 37.2,
-    anamnesis:
-      "Lorem Ipsum es simplemente el texto de relleno de las imprentas y archivos de texto. Lorem Ipsum ha sido el texto de relleno estándar de las industrias desde el año 1500, cuando un impresor (N. del T. persona que se dedica a la imprenta) desconocido usó una galería de textos y los mezcló de tal manera que logró hacer un libro de textos especímen. No sólo sobrevivió 500 años, sino que también ingresó como texto de relleno en documentos electrónicos, quedando esencialmente igual al original. Fue popularizado en los 60s con la creación de las hojas 'Letraset', las cuales contenían pasajes de Lorem Ipsum, y más recientemente con software de autoedición, como por ejemplo Aldus PageMaker, el cual incluye versiones de Lorem Ipsum.",
-    escala_dolor: 8,
-  });
+  const [formData, setFormData] = useState<FormState>(FORM_VACIO);
+  const [paciente, setPaciente] = useState<PacienteEncontrado | null>(null);
+  const [claveFormulario, setClaveFormulario] = useState(0);
 
+  const [enviando, setEnviando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [erroresCampo, setErroresCampo] = useState<ErrorCampo[]>([]);
+  const [resultado, setResultado] = useState<FormularioClinicoRespuesta | null>(null);
+
+  // Recomendación del asistente IA: sigue siendo una simulación (no hay endpoint de IA todavía).
   const [recommendation, setRecommendation] = useState({
-    esi: 2,
-    gravedad: "EMERGENCIA",
-    justificacion: [
-      "Taquicardia sinusal (112 bpm) asociada a dolor torácico opresivo de inicio súbito y diaforesis.",
-      "Desaturación leve (91% SpO2) y taquípnea.",
-      "Alto riesgo de síndrome coronario agudo.",
-    ],
+    esi: 3,
+    gravedad: "URGENCIA",
+    justificacion: ["Complete los datos y pulse Actualizar para ver una recomendación de ejemplo."],
   });
-
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
-  // Manejador para inputs de texto y numéricos (incluye textarea)
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: e.target.type === "number" ? Number(value) : value,
-    }));
-  };
-
-  // Manejador especial para botones de radio y escala de dolor
-  const handleCustomFieldChange = (field: keyof ClinicalFormData, value: string | number) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleUpdateTriage = async () => {
     setIsLoading(true);
-    console.log("Enviando datos clínicos para reclasificación:", formData);
-
     try {
       await new Promise((resolve) => setTimeout(resolve, 800));
+      const fc = aNumero(formData.frecuencia_cardiaca);
+      const spo2 = aNumero(formData.saturacion_oxigeno);
+      const dolor = formData.escala_dolor ?? 0;
 
-      if (formData.frecuencia_cardiaca < 100 && formData.escala_dolor < 5) {
+      if (fc < 100 && dolor < 5) {
         setRecommendation({
           esi: 3,
           gravedad: "URGENCIA",
@@ -93,17 +95,89 @@ export default function NurseTriagePage() {
           esi: 2,
           gravedad: "EMERGENCIA",
           justificacion: [
-            `Frecuencia Cardíaca en ${formData.frecuencia_cardiaca} bpm con dolor en escala ${formData.escala_dolor}/10.`,
-            `Saturación de oxígeno en ${formData.saturacion_o2}% requerirá monitoreo activo.`,
+            `Frecuencia Cardíaca en ${fc} bpm con dolor en escala ${dolor}/10.`,
+            `Saturación de oxígeno en ${spo2}% requerirá monitoreo activo.`,
             "Se mantiene criterio de alta prioridad por presentación de síntomas.",
           ],
         });
       }
-    } catch (error) {
-      console.error("Error al actualizar triage:", error);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleSubmit = async () => {
+    setError(null);
+    setErroresCampo([]);
+
+    if (!paciente) {
+      setError("Busque o registre al paciente antes de enviar el formulario.");
+      return;
+    }
+    const nivel = formData.nivel_conciencia;
+    if (nivel === "") {
+      setError("Seleccione el nivel de conciencia.");
+      return;
+    }
+    if (formData.escala_dolor === null) {
+      setError("Seleccione la escala de dolor.");
+      return;
+    }
+
+    const numeros = {
+      presion_sistolica: aNumero(formData.presion_sistolica),
+      presion_diastolica: aNumero(formData.presion_diastolica),
+      frecuencia_cardiaca: aNumero(formData.frecuencia_cardiaca),
+      frecuencia_respiratoria: aNumero(formData.frecuencia_respiratoria),
+      temperatura: aNumero(formData.temperatura),
+      saturacion_oxigeno: aNumero(formData.saturacion_oxigeno),
+    };
+    if (Object.values(numeros).some((n) => Number.isNaN(n))) {
+      setError("Complete todos los signos vitales.");
+      return;
+    }
+
+    // El backend no tiene campo de alergias: se incluyen en el motivo de consulta.
+    const partes: string[] = [];
+    if (formData.anamnesis.trim()) partes.push(formData.anamnesis.trim());
+    if (formData.alergias.trim()) partes.push(`Alergias: ${formData.alergias.trim()}`);
+    const motivo = partes.join("\n\n");
+    if (motivo.length > MAX_MOTIVO) {
+      setError(`La anamnesis y las alergias superan los ${MAX_MOTIVO} caracteres (${motivo.length}).`);
+      return;
+    }
+
+    setEnviando(true);
+    try {
+      const respuesta = await enviarFormulario({
+        patient_id: paciente.patient_id,
+        motivo_consulta: motivo || undefined,
+        signos_vitales: {
+          ...numeros,
+          escala_dolor: formData.escala_dolor,
+          nivel_conciencia: nivel,
+        },
+      });
+      setResultado(respuesta);
+    } catch (e) {
+      if (e instanceof ApiError) {
+        setError(e.errores.length > 0 ? "Revise los datos ingresados:" : e.message);
+        setErroresCampo(e.errores);
+      } else {
+        setError("Error inesperado al enviar el formulario.");
+      }
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  const handleNuevoIngreso = () => {
+    setFormData(FORM_VACIO);
+    setPaciente(null);
+    setResultado(null);
+    setError(null);
+    setErroresCampo([]);
+    setClaveFormulario((k) => k + 1); // reinicia la búsqueda de paciente
   };
 
   return (
@@ -117,23 +191,21 @@ export default function NurseTriagePage() {
             Ingreso y Evaluación de Triage
           </h1>
 
+          <PatientLookupCard key={claveFormulario} onPacienteChange={setPaciente} />
+
           <PatientDataCard
-            rut={formData.rut}
-            nombre={formData.nombre}
-            alergias={formData.alergias}
-            edad={formData.edad}
-            hora_llegada={formData.hora_llegada}
-            sexo={formData.sexo}
             nivel_conciencia={formData.nivel_conciencia}
+            alergias={formData.alergias}
             onChange={handleChange}
-            onRadioChange={handleCustomFieldChange}
+            onNivelChange={(valor) => setFormData((prev) => ({ ...prev, nivel_conciencia: valor }))}
           />
 
           <VitalSignsCard
-            pa={formData.presion_arterial}
+            pas={formData.presion_sistolica}
+            pad={formData.presion_diastolica}
             fc={formData.frecuencia_cardiaca}
             fr={formData.frecuencia_respiratoria}
-            spo2={formData.saturacion_o2}
+            spo2={formData.saturacion_oxigeno}
             temp={formData.temperatura}
             onChange={handleChange}
           />
@@ -142,8 +214,51 @@ export default function NurseTriagePage() {
             anamnesis={formData.anamnesis}
             escala_dolor={formData.escala_dolor}
             onChange={handleChange}
-            onPainChange={(value) => handleCustomFieldChange("escala_dolor", value)}
+            onPainChange={(valor) => setFormData((prev) => ({ ...prev, escala_dolor: valor }))}
           />
+
+          {/* Envío al backend */}
+          <div className="space-y-3">
+            {error && (
+              <div role="alert" className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-4 text-sm">
+                <p className="font-bold">{error}</p>
+                {erroresCampo.length > 0 && (
+                  <ul className="list-disc pl-5 mt-1">
+                    {erroresCampo.map((x, i) => (
+                      <li key={i}>
+                        {x.field.split(".").pop()}: {x.message}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+
+            {resultado ? (
+              <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl p-4 text-sm flex items-center justify-between gap-4">
+                <p>
+                  <span className="font-bold">Ingreso registrado.</span> Episodio{" "}
+                  {resultado.episodio_id.slice(0, 8)} — estado: {resultado.estado}.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleNuevoIngreso}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-lg cursor-pointer whitespace-nowrap"
+                >
+                  Nuevo ingreso
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={handleSubmit}
+                disabled={enviando}
+                className="w-full bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-white font-bold py-3 rounded-xl cursor-pointer"
+              >
+                {enviando ? "Registrando..." : "Registrar ingreso a triage"}
+              </button>
+            )}
+          </div>
         </section>
 
         {/* LADO DERECHO: WIDGET ASISTENTE IA (4 columnas) */}
