@@ -103,7 +103,14 @@ python -m pytest --cov=app --cov-report=term-missing
 
 ## 5. Estado actual de las pruebas
 
-Se realizó una ejecución inicial de las pruebas automatizadas del backend mediante pytest.
+Se realizó una ejecución de las pruebas automatizadas del backend mediante pytest.
+
+**Fecha de ejecución:** 2 de noviembre de 2026.
+
+**Entorno utilizado:**
+- Python 3.11.9.
+- pytest 9.2.0.
+- pytest-cov 7.1.0.
 
 **Comando ejecutado:**
 
@@ -120,11 +127,13 @@ python -m pytest -v -rs
 | Pruebas fallidas | 0 |
 | Total | 96 |
 
-Las 93 pruebas aprobadas verifican funcionalidades relacionadas con salud del servicio, logging, validación de pacientes, RUT, sanitización y esquemas de triage.
+Las 93 pruebas aprobadas verifican funcionalidades relacionadas con la salud del servicio, logging, validación de pacientes, RUT, sanitización y esquemas de triage.
 
-Las 3 pruebas omitidas pertenecen a `tests/test_patients_db.py` y requieren las variables de entorno `DATABASE_URL` y `APP_ENCRYPTION_KEY` para conectarse a PostgreSQL y utilizar el mecanismo de cifrado.
+Las 3 pruebas omitidas pertenecen a `tests/test_patients_db.py`. Estas requieren las variables de entorno `DATABASE_URL` y `APP_ENCRYPTION_KEY` para conectarse a PostgreSQL y utilizar el mecanismo de cifrado.
 
-Por lo tanto, estas pruebas de integración todavía deben ejecutarse con la configuración correspondiente.
+Por este motivo, las pruebas de integración con PostgreSQL aún no se consideran validadas.
+
+**Conclusión de la ejecución:** pytest finalizó correctamente, con 93 pruebas aprobadas, 3 omitidas y ninguna fallida.
 
 ## 6. Trabajo pendiente
 
