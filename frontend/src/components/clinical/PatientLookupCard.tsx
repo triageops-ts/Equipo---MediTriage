@@ -8,6 +8,7 @@ import {
   type PacienteEncontrado,
   type SexoBiologico,
 } from "@/lib/api";
+import { CAMPO_PRIVADO } from "@/lib/privacidad";
 
 type Estado = "inicial" | "buscando" | "encontrado" | "nuevo" | "registrando";
 
@@ -124,6 +125,7 @@ export const PatientLookupCard = ({ onPacienteChange }: PatientLookupProps) => {
           id="rut"
           type="text"
           value={rut}
+          {...CAMPO_PRIVADO}
           placeholder="12.345.678-5"
           onChange={(e) => handleRutChange(e.target.value)}
           onKeyDown={(e) => {
@@ -178,6 +180,7 @@ export const PatientLookupCard = ({ onPacienteChange }: PatientLookupProps) => {
               id="nombre"
               type="text"
               value={nombre}
+              {...CAMPO_PRIVADO}
               onChange={(e) => setNombre(e.target.value)}
               className={INPUT}
             />
@@ -192,6 +195,7 @@ export const PatientLookupCard = ({ onPacienteChange }: PatientLookupProps) => {
                 id="nacimiento"
                 type="date"
                 value={fechaNacimiento}
+                autoComplete="off"
                 max={new Date().toISOString().slice(0, 10)}
                 onChange={(e) => setFechaNacimiento(e.target.value)}
                 className="border border-slate-300 rounded px-3 py-1 bg-white focus:outline-none"

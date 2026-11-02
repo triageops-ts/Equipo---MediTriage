@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Navbar } from "@/components/clinical/Navbar";
 import { VitalSignsCard } from "@/components/clinical/VitalSignsCard";
 import { AIAssistantCard } from "@/components/clinical/AIAssistantCard";
@@ -64,6 +64,28 @@ export default function NurseTriagePage() {
     justificacion: ["Complete los datos y pulse Actualizar para ver una recomendación de ejemplo."],
   });
   const [isLoading, setIsLoading] = useState<boolean>(false);
+
+  // Borra todo lo que identifica al paciente: formulario, paciente elegido y el buscador.
+  // No toca `resultado`, que solo tiene el id del episodio y su estado.
+  const limpiarDatosPersonales = useCallback(() => {
+    setFormData(FORM_VACIO);
+    setPaciente(null);
+    setClaveFormulario((k) => k + 1); // vacía el buscador (RUT, nombre y nacimiento)
+  }, []);
+
+  // Con el botón "Atrás" el navegador puede restaurar la página tal como estaba (bfcache),
+  // con el paciente anterior en pantalla. En ese caso se borra todo.
+  useEffect(() => {
+    const alMostrar = (e: PageTransitionEvent) => {
+      if (!e.persisted) return;
+      limpiarDatosPersonales();
+      setResultado(null);
+      setError(null);
+      setErroresCampo([]);
+    };
+    window.addEventListener("pageshow", alMostrar);
+    return () => window.removeEventListener("pageshow", alMostrar);
+  }, [limpiarDatosPersonales]);
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
@@ -159,6 +181,7 @@ export default function NurseTriagePage() {
         },
       });
       setResultado(respuesta);
+      limpiarDatosPersonales(); // ya quedó guardado en el servidor: no hace falta tenerlo en el navegador
     } catch (e) {
       if (e instanceof ApiError) {
         setError(e.errores.length > 0 ? "Revise los datos ingresados:" : e.message);
@@ -172,12 +195,10 @@ export default function NurseTriagePage() {
   };
 
   const handleNuevoIngreso = () => {
-    setFormData(FORM_VACIO);
-    setPaciente(null);
+    limpiarDatosPersonales();
     setResultado(null);
     setError(null);
     setErroresCampo([]);
-    setClaveFormulario((k) => k + 1); // reinicia la búsqueda de paciente
   };
 
   return (
