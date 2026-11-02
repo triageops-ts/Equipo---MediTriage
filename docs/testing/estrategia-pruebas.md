@@ -300,3 +300,19 @@ Por este motivo, las pruebas de integración con PostgreSQL aún no se considera
 MediTriage cuenta con una base de pruebas automatizadas para el backend utilizando pytest. La ejecución inicial obtuvo 93 pruebas aprobadas, 3 omitidas por falta de configuración de dependencias y ninguna prueba fallida.
 
 Esta estrategia establece los criterios para continuar validando el sistema mediante pruebas unitarias, de integración y End-to-End, a medida que se completen sus componentes e integraciones.
+
+
+### Verificación del servicio Redis
+
+Se verificó el funcionamiento del contenedor Redis mediante comandos de diagnóstico.
+
+**Resultados:**
+- Comando `redis-cli PING`: respuesta `PONG`.
+- Versión del servidor: Redis 7.4.12.
+- Modo de ejecución: Standalone.
+- Puerto de escucha: 6379.
+- Estado: servicio operativo.
+
+**Conclusión:**
+
+Redis se encuentra correctamente desplegado y responde a las solicitudes de diagnóstico. Sin embargo, esta verificación corresponde únicamente a la disponibilidad del servicio. La integración con el backend FastAPI y las pruebas de almacenamiento y recuperación de sesiones o estados temporales quedan pendientes de implementación y validación.
