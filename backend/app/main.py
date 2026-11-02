@@ -1,4 +1,4 @@
-﻿import logging
+import logging
 import os
 import time
 import uuid
@@ -8,7 +8,8 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
-from app.api.v1.endpoints import health, patients
+
+from app.api.v1.endpoints import health, patients, triage
 from app.core.logging_config import configure_logging, request_id_var, ruta_sin_parametros
 
 # Factor 11: logs JSON a stdout con PII enmascarada (ver app/core/logging_config.py).
@@ -23,6 +24,7 @@ app = FastAPI(
 
 app.include_router(health.router, prefix="/api/v1")
 app.include_router(patients.router, prefix="/api/v1")
+app.include_router(triage.router, prefix="/api/v1")
 
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
@@ -61,6 +63,23 @@ async def log_requests(request: Request, call_next):
 
 _PROBLEM_BASE = "https://api.meditriage.com/problems"
 
+# Mensajes en español para los errores de tipo más comunes de Pydantic.
+_MENSAJES = {
+    "missing": "Campo obligatorio.",
+    "extra_forbidden": "Campo no permitido.",
+    "int_type": "Debe ser un número entero.",
+    "int_parsing": "Debe ser un número entero.",
+    "int_from_float": "Debe ser un número entero.",
+    "float_type": "Debe ser un número válido.",
+    "float_parsing": "Debe ser un número válido.",
+    "finite_number": "Debe ser un número válido.",
+    "uuid_parsing": "Debe ser un identificador UUID válido.",
+    "uuid_type": "Debe ser un identificador UUID válido.",
+    "string_type": "Debe ser texto.",
+    "bool_type": "Debe ser verdadero o falso.",
+    "bool_parsing": "Debe ser verdadero o falso.",
+    "json_invalid": "El cuerpo de la petición no es un JSON válido.",
+}
 
 def _campo(loc) -> str:
     # loc = ("body", "rut") -> "rut"
@@ -74,7 +93,7 @@ async def validation_error_handler(request: Request, exc: RequestValidationError
         {
             "field": _campo(e["loc"]),
             # Pydantic antepone "Value error, " a los mensajes de nuestros validadores.
-            "message": e["msg"].removeprefix("Value error, "),
+            "message": _MENSAJES.get(e["type"], e["msg"].removeprefix("Value error, ")),
         }
         for e in exc.errors()
     ]
