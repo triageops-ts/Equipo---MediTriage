@@ -1,8 +1,5 @@
 #!/usr/bin/env node
-/**
- * Revisión rápida de PII en el navegador (tarjeta S06-5). Sin dependencias.
- *   npm run check:pii
- *
+/*
  * Falla (código 1) si en src/ aparece:
  *   1. almacenamiento del navegador: localStorage, sessionStorage, IndexedDB, cookies,
  *      Cache API, navigator.storage;
@@ -34,7 +31,7 @@ function archivos(dir) {
   });
 }
 
-/** Devuelve cada etiqueta <input ...> / <textarea ...> completa (respeta llaves y comillas). */
+
 function etiquetasDeCampo(texto) {
   const etiquetas = [];
   const inicio = /<(input|textarea)\b/g;
