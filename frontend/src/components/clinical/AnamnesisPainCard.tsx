@@ -22,6 +22,7 @@ export const AnamnesisPainCard = ({
       name="anamnesis"
       value={anamnesis}
       onChange={onChange}
+      autoComplete="off"
       rows={5}
       className="w-full text-sm border border-slate-200 rounded-lg p-3 bg-white text-slate-700 leading-relaxed focus:outline-none"
     />
