@@ -1,3 +1,4 @@
+
 import uuid
 from uuid import UUID
 
@@ -5,6 +6,7 @@ import psycopg
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.db import get_conn
+from app.core.sanitizer import sanitize_symptoms_text
 from app.schemas.decision import (
     JUSTIFICACION_MIN_CARACTERES,
     DecisionInput,
@@ -42,13 +44,22 @@ _INSERT_SIGNOS = """
          (now() AT TIME ZONE 'UTC'))
 """
 
+_INSERT_SINTOMA = """
+    INSERT INTO sintomas_triage
+        (sintoma_id, episodio_id, codigo_sintoma, severidad,
+         tiempo_evolucion_horas)
+    VALUES
+        (%(sintoma_id)s, %(episodio_id)s, %(codigo_sintoma)s,
+         %(severidad)s, %(tiempo_evolucion_horas)s)
+"""
+
 
 @router.post(
     "/formulario",
     response_model=FormularioClinicoResponse,
     status_code=status.HTTP_201_CREATED,
     tags=["Triages"],
-    summary="Registra el formulario clínico (signos vitales) de un paciente",
+    summary="Registra el formulario clínico (signos vitales y síntomas) de un paciente",
 )
 def crear_formulario(
     data: FormularioClinicoInput, conn: psycopg.Connection = Depends(get_conn)
@@ -58,7 +69,7 @@ def crear_formulario(
     signos = data.signos_vitales.model_dump()
 
     try:
-        # Episodio y signos vitales se guardan juntos o no se guarda nada.
+        # Episodio, signos vitales y síntomas se guardan juntos.
         with conn.transaction():
             with conn.cursor() as cur:
                 cur.execute(_EXISTE_PACIENTE, {"patient_id": data.patient_id})
@@ -82,7 +93,11 @@ def crear_formulario(
                         "episodio_id": episodio_id,
                         "patient_id": data.patient_id,
                         "usuario_id": data.usuario_id,
-                        "motivo": data.motivo_consulta,
+                        "motivo": (
+                            sanitize_symptoms_text(data.motivo_consulta)
+                            if data.motivo_consulta
+                            else None
+                        ),
                         "estado": ESTADO_INICIAL,
                     },
                 )
@@ -90,8 +105,23 @@ def crear_formulario(
 
                 cur.execute(
                     _INSERT_SIGNOS,
-                    {"signos_vitales_id": signos_vitales_id, "episodio_id": episodio_id, **signos},
+                    {
+                        "signos_vitales_id": signos_vitales_id,
+                        "episodio_id": episodio_id,
+                        **signos,
+                    },
                 )
+
+                for sintoma in data.sintomas:
+                    cur.execute(
+                        _INSERT_SINTOMA,
+                        {
+                            "sintoma_id": uuid.uuid4(),
+                            "episodio_id": episodio_id,
+                            **sintoma.model_dump(),
+                        },
+                    )
+
     except psycopg.errors.NotNullViolation as e:
         if e.diag.column_name == "usuario_id":
             raise HTTPException(
@@ -109,10 +139,13 @@ def crear_formulario(
         signos_vitales=data.signos_vitales,
     )
 
+
 # --- Decisión final de la enfermera -----------------------------------------
 
 # Bloquea el episodio para que dos decisiones simultáneas no se pisen.
-_BLOQUEAR_EPISODIO = "SELECT 1 FROM episodio_triage WHERE episodio_id = %(episodio_id)s FOR UPDATE"
+_BLOQUEAR_EPISODIO = (
+    "SELECT 1 FROM episodio_triage WHERE episodio_id = %(episodio_id)s FOR UPDATE"
+)
 
 _ULTIMA_SUGERENCIA_IA = """
     SELECT nivel_esi_sugerido
@@ -122,7 +155,9 @@ _ULTIMA_SUGERENCIA_IA = """
     LIMIT 1
 """
 
-_YA_TIENE_DECISION = "SELECT 1 FROM decision_clinica WHERE episodio_id = %(episodio_id)s"
+_YA_TIENE_DECISION = (
+    "SELECT 1 FROM decision_clinica WHERE episodio_id = %(episodio_id)s"
+)
 
 _INSERT_DECISION = """
     INSERT INTO decision_clinica
@@ -208,6 +243,7 @@ def registrar_decision(
                     },
                 )
                 fecha_decision = cur.fetchone()[0]
+
     except psycopg.errors.NotNullViolation as e:
         if e.diag.column_name == "usuario_id":
             raise HTTPException(

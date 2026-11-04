@@ -18,3 +18,5 @@ __pycache__/
 *.pem
 .coverage
 .pytest_cache/
+
+backend/.venv/

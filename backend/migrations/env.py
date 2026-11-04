@@ -14,13 +14,12 @@ database_url = os.environ.get("DATABASE_URL")
 if not database_url:
     raise RuntimeError("Falta la variable de entorno DATABASE_URL.")
 
-# SQLAlchemy utiliza psycopg2 para esta conexión.
+# SQLAlchemy utiliza psycopg (versión 3) para esta conexión.
 database_url = database_url.replace(
     "postgresql://",
-    "postgresql+psycopg2://",
+    "postgresql+psycopg://",
     1
 )
-
 config.set_main_option("sqlalchemy.url", database_url)
 
 target_metadata = None

@@ -66,6 +66,39 @@ class SignosVitalesInput(BaseModel):
             return v.strip().lower()
         raise ValueError("Debe ser uno de: " + ", ".join(NIVELES_CONCIENCIA) + ".")
 
+class SintomaInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    codigo_sintoma: str = Field(
+        min_length=1,
+        description="Código del síntoma según catálogo clínico.",
+    )
+    severidad: str = Field(
+        description="Severidad del síntoma: leve, moderada o severa.",
+    )
+    tiempo_evolucion_horas: Optional[int] = Field(
+        default=None,
+        ge=0,
+        description="Tiempo de evolución del síntoma en horas.",
+    )
+
+    @field_validator("codigo_sintoma")
+    @classmethod
+    def validar_codigo(cls, v):
+        v = v.strip()
+        if not v:
+            raise ValueError("El código del síntoma no puede estar vacío.")
+        return v
+
+    @field_validator("severidad", mode="before")
+    @classmethod
+    def validar_severidad(cls, v):
+        if isinstance(v, str) and v.strip().lower() in (
+            "leve", "moderada", "severa"
+        ):
+            return v.strip().lower()
+        raise ValueError("La severidad debe ser leve, moderada o severa.")
+
 
 class FormularioClinicoInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -75,6 +108,7 @@ class FormularioClinicoInput(BaseModel):
     usuario_id: Optional[UUID] = None
     motivo_consulta: Optional[str] = Field(default=None, max_length=1000)
     signos_vitales: SignosVitalesInput
+    sintomas: list[SintomaInput] = Field(default_factory=list)
 
     @field_validator("motivo_consulta")
     @classmethod

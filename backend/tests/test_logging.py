@@ -202,8 +202,8 @@ def test_422_loguea_solo_nombres_de_campo(salida_logs):
 
     fallo = next(e for e in _eventos(salida_logs) if e["message"] == "validation_failed")
     assert fallo["fields"] == ["rut"]
-    assert "dígito verificador" not in salida_logs.getvalue()
     assert "11.111.111" not in salida_logs.getvalue()
+    assert "dígito verificador" not in salida_logs.getvalue()
     _sin_pii(salida_logs)
 
 
@@ -218,3 +218,71 @@ def test_error_no_controlado_registra_tipo_sin_mensaje(salida_logs):
     fallo = next(e for e in _eventos(salida_logs) if e["message"] == "request_failed")
     assert fallo["error_type"] == "RuntimeError"
     _sin_pii(salida_logs)
+
+def test_triage_sanitiza_datos_personales_del_motivo(salida_logs):
+    class _CursorTriage(_Cursor):
+        def __init__(self):
+            super().__init__(existe=True)
+            self.motivo_guardado = None
+
+        def execute(self, sql, params=None):
+            super().execute(sql, params)
+            if "INSERT INTO episodio_triage" in sql:
+                self.motivo_guardado = params["motivo"]
+
+        def fetchone(self):
+            if "SELECT 1 FROM paciente" in self.ultima:
+                return (1,)
+            if "SELECT 1 FROM usuario_staff" in self.ultima:
+                return (1,)
+            return (datetime(2026, 11, 1, tzinfo=timezone.utc),)
+
+    class _ConnTriage:
+        def __init__(self):
+            self.cursor_t = _CursorTriage()
+
+        def transaction(self):
+            return self.cursor_t
+
+        def cursor(self):
+            return self.cursor_t
+
+    conexion = _ConnTriage()
+    app.dependency_overrides[get_conn] = lambda: conexion
+
+    motivo = (
+        f"Dolor abdominal. RUT {RUT}, "
+        f"teléfono {TELEFONO}, correo {EMAIL}"
+    )
+
+    datos = {
+        "patient_id": str(uuid.uuid4()),
+        "usuario_id": str(uuid.uuid4()),
+        "motivo_consulta": motivo,
+        "signos_vitales": {
+            "presion_sistolica": 120,
+            "presion_diastolica": 80,
+            "frecuencia_cardiaca": 90,
+            "frecuencia_respiratoria": 18,
+            "temperatura": 36.5,
+            "saturacion_oxigeno": 98,
+            "escala_dolor": 3,
+            "nivel_conciencia": "alerta",
+        },
+    }
+
+    r = TestClient(app).post("/api/v1/triage/formulario", json=datos)
+
+    assert r.status_code == 201
+    assert conexion.cursor_t.motivo_guardado is not None
+
+    guardado = conexion.cursor_t.motivo_guardado
+
+    assert "Dolor abdominal" in guardado
+    assert RUT not in guardado
+    assert EMAIL not in guardado
+    assert TELEFONO not in guardado
+
+    assert "[RUT OCULTO]" in guardado
+    assert "[EMAIL OCULTO]" in guardado
+    assert "[TELÉFONO OCULTO]" in guardado

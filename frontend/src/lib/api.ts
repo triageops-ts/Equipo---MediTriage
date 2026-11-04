@@ -39,13 +39,21 @@ export interface SignosVitales {
   nivel_conciencia: NivelConciencia;
 }
 
+export type SeveridadSintoma = "leve" | "moderada" | "severa";
+
+export interface SintomaClinico {
+  codigo_sintoma: string;
+  severidad: SeveridadSintoma;
+  tiempo_evolucion_horas?: number;
+}
+
 export interface FormularioClinico {
   patient_id: string;
   usuario_id?: string;
   motivo_consulta?: string;
   signos_vitales: SignosVitales;
+  sintomas?: SintomaClinico[];
 }
-
 export interface FormularioClinicoRespuesta {
   episodio_id: string;
   signos_vitales_id: string;
