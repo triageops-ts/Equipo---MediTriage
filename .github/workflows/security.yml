@@ -73,7 +73,15 @@ jobs:
             --output sbom.json \
             .
 
-      # Pendiente (siguiente tarea): subir sbom.json como artefacto del run.
+      # Publica el SBOM como artefacto del run (se descarga desde la pestaña Summary).
+      - name: Publicar SBOM como artefacto
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom.json
+          if-no-files-found: error
+          retention-days: 30
 
 
   # Se usa el binario y no gitleaks-action, porque en repos de organización
