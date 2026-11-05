@@ -1,6 +1,5 @@
 name: Security
 
-# Sin filtros de rutas: los tres checks (sast, sca, secrets) deben aparecer en todos los PRs.
 on:
   push:
     branches: ["main"]
