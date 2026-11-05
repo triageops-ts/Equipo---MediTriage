@@ -67,7 +67,7 @@ jobs:
       - name: Escanear el historial completo (gitleaks)
         run: |
           "$RUNNER_TEMP/gitleaks" git \
-            --config .gitleaks.toml \
+            --config "$GITHUB_WORKSPACE/.gitleaks.toml" \
             --log-opts="--all" \
             --redact \
             --verbose \
