@@ -23,7 +23,7 @@ jobs:
     name: sast
     runs-on: ubuntu-latest
     steps:
-      - name: Pendiente (Tarjeta 2)
+      - name: Pendiente (Tarjeta 16)
         run: echo "Aquí va Semgrep con p/owasp-top-ten y las reglas propias de .semgrep/"
 
   # ---------------------------------------------------------------------------
@@ -33,7 +33,7 @@ jobs:
     name: sca
     runs-on: ubuntu-latest
     steps:
-      - name: Pendiente (Tarjeta 4)
+      - name: Pendiente (Tarjeta 18)
         run: echo "Aquí va Trivy filesystem (HIGH/CRITICAL con parche) y la generación del SBOM CycloneDX"
 
 
