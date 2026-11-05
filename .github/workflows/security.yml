@@ -63,7 +63,17 @@ jobs:
             --format table \
             .
 
-      # Pendiente: SBOM CycloneDX (sbom.json) y subirlo como artefacto.
+      # Genera el inventario de dependencias (SBOM) en formato CycloneDX.
+      # Corre aunque el escaneo anterior falle, para que el SBOM exista siempre.
+      - name: Generar SBOM (CycloneDX)
+        if: ${{ !cancelled() }}
+        run: |
+          "$RUNNER_TEMP/trivy" fs \
+            --format cyclonedx \
+            --output sbom.json \
+            .
+
+      # Pendiente (siguiente tarea): subir sbom.json como artefacto del run.
 
 
   # Se usa el binario y no gitleaks-action, porque en repos de organización
