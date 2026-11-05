@@ -20,3 +20,6 @@ __pycache__/
 .pytest_cache/
 
 backend/.venv/
+
+__pycache__/
+*.pyc
