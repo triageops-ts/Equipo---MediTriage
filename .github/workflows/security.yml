@@ -1,6 +1,6 @@
 name: Security
 
-# Sin filtros de rutas: los tres checks (sast, sca, secrets) deben aparecer en todos los PRs.
+
 on:
   push:
     branches: ["main"]
@@ -18,7 +18,7 @@ concurrency:
 # Los tres jobs no tienen "needs" entre ellos, por lo que corren en paralelo.
 jobs:
   # ---------------------------------------------------------------------------
-  # Tarjeta 2: job sast (esqueleto). Semgrep con p/owasp-top-ten + carpeta .semgrep/
+  # Tarjeta 16
   # ---------------------------------------------------------------------------
   sast:
     name: sast
@@ -28,7 +28,7 @@ jobs:
         run: echo "Aquí va Semgrep con p/owasp-top-ten y las reglas propias de .semgrep/"
 
   # ---------------------------------------------------------------------------
-  # Tarjeta 4: job sca (esqueleto). Trivy filesystem + SBOM CycloneDX
+  # Tarjeta 18
   # ---------------------------------------------------------------------------
   sca:
     name: sca
@@ -37,11 +37,10 @@ jobs:
       - name: Pendiente (Tarjeta 4)
         run: echo "Aquí va Trivy filesystem (HIGH/CRITICAL con parche) y la generación del SBOM CycloneDX"
 
-  # ---------------------------------------------------------------------------
-  # Tarjeta 1: job secrets. gitleaks sobre todo el historial del repositorio.
+ 
   # Se usa el binario y no gitleaks-action, porque en repos de organización
   # la acción exige una licencia (GITLEAKS_LICENSE).
-  # ---------------------------------------------------------------------------
+
   secrets:
     name: secrets
     runs-on: ubuntu-latest
