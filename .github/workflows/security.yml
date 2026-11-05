@@ -32,9 +32,38 @@ jobs:
   sca:
     name: sca
     runs-on: ubuntu-latest
+    env:
+      # Binario oficial con verificación de checksum; no trivy-action
+      # (sus tags fueron comprometidos en marzo de 2026).
+      TRIVY_VERSION: "0.76.1"
     steps:
-      - name: Pendiente (Tarjeta 18)
-        run: echo "Aquí va Trivy filesystem (HIGH/CRITICAL con parche) y la generación del SBOM CycloneDX"
+      - name: Descargar el código
+        uses: actions/checkout@v4
+
+      - name: Instalar Trivy
+        run: |
+          set -euo pipefail
+          base="https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}"
+          file="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          cd "$RUNNER_TEMP"
+          curl -sSfL -O "${base}/${file}"
+          curl -sSfL -O "${base}/trivy_${TRIVY_VERSION}_checksums.txt"
+          sha256sum --ignore-missing -c "trivy_${TRIVY_VERSION}_checksums.txt"
+          tar -xzf "${file}" trivy
+          "$RUNNER_TEMP/trivy" --version
+
+      # Falla solo si hay vulnerabilidades HIGH/CRITICAL con parche disponible.
+      - name: Escanear dependencias (Trivy filesystem)
+        run: |
+          "$RUNNER_TEMP/trivy" fs \
+            --scanners vuln \
+            --severity HIGH,CRITICAL \
+            --ignore-unfixed \
+            --exit-code 1 \
+            --format table \
+            .
+
+      # Pendiente: SBOM CycloneDX (sbom.json) y subirlo como artefacto.
 
 
   # Se usa el binario y no gitleaks-action, porque en repos de organización
