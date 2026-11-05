@@ -1,5 +1,6 @@
 import React from "react";
 import type { NivelConciencia } from "@/lib/api";
+import { CAMPO_PRIVADO } from "@/lib/privacidad";
 
 interface PatientDataProps {
   nivel_conciencia: NivelConciencia | "";
@@ -47,6 +48,7 @@ export const PatientDataCard = ({
         type="text"
         name="alergias"
         value={alergias}
+        {...CAMPO_PRIVADO}
         onChange={onChange}
         className="flex-1 border border-slate-300 rounded px-3 py-1 bg-white focus:outline-none"
       />
