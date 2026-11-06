@@ -290,3 +290,85 @@ Documentación formal de la decisión de arquitectura adoptada para la implement
 
 ### 4. Estado del Despliegue en Argo CD (Healthy & Synced)
 ![Argo CD Healthy and Synced](docs/04-argocd-healthy.png)
+
+---
+
+## 🛡️ Seguridad en el pipeline (shift-left)
+
+El workflow [`security.yml`](.github/workflows/security.yml) revisa la seguridad del proyecto en cada Pull Request hacia `main` y en cada push a `main`, antes de que un cambio llegue a producción. También se puede ejecutar a mano desde la pestaña Actions. Tiene tres jobs que corren en paralelo y sin filtros de rutas, por lo que los tres checks aparecen en todos los PRs. Un PR no se puede mergear a `main` mientras alguno de los tres falle.
+
+### Qué revisa cada job y cuándo falla
+
+| Job | Herramienta | Qué revisa | Cuándo falla |
+|---|---|---|---|
+| `sast` | Semgrep, con las reglas `p/owasp-top-ten` y las propias de `.semgrep/` | El código fuente | Cuando Semgrep encuentra un hallazgo |
+| `sca` | Trivy 0.76.1 (modo filesystem) | Las dependencias del backend (`backend/requirements.txt`) y del frontend (`package-lock.json`) | Cuando hay una vulnerabilidad HIGH o CRITICAL **con parche disponible** (`--ignore-unfixed`) |
+| `secrets` | gitleaks 8.30.0 | **Todo el historial** del repositorio (`fetch-depth: 0`), no solo el último commit | Cuando encuentra un secreto que no está autorizado en `.gitleaks.toml` |
+
+Detalles de cada uno:
+
+- **Reglas propias de Semgrep** (`.semgrep/meditriage-rules.yml`, con sus casos de prueba en `.semgrep/meditriage-rules.py`):
+  - `meditriage-pii-en-logs`: ningún dato personal (RUT, nombre, contacto o fecha de nacimiento) puede enviarse a un log.
+  - `meditriage-secreto-en-codigo`: los secretos se leen solo de variables de entorno y nunca llevan un valor por defecto.
+  - Se verifican con `semgrep --test .semgrep/`.
+- **SBOM:** el job `sca` genera el inventario de dependencias en formato CycloneDX (`sbom.json`) y lo publica como el artefacto `sbom` del run. Se descarga desde el resumen del run en la pestaña Actions y se conserva 30 días. Se genera aunque el escaneo de vulnerabilidades falle.
+- **Secretos:** las excepciones autorizadas están en `.gitleaks.toml`, cada una con su justificación.
+
+### Cómo re-triar un hallazgo
+
+Re-triar es revisar un hallazgo y decidir qué hacer con él.
+
+1. **Encontrarlo.** Abre el PR, entra a la pestaña Checks (o a Actions), elige el job que falló y lee su log:
+   - Semgrep indica la regla y la línea de código.
+   - Trivy muestra una tabla con el paquete, la versión instalada, la versión corregida y el identificador (CVE).
+   - gitleaks indica la regla, el archivo, el commit y el fingerprint. El valor del secreto sale oculto.
+2. **Clasificarlo.** ¿Es real o un falso positivo? ¿Es un valor de ejemplo? ¿El código o el paquete afectado se ejecuta en producción o solo en pruebas? ¿Existe un parche?
+3. **Actuar según el caso:**
+
+   | Caso | Qué hacer |
+   |---|---|
+   | Hallazgo real de Semgrep | Corregir el código y volver a empujar |
+   | Falso positivo de Semgrep | Agregar `# nosemgrep: <id-de-la-regla>` en esa línea, con la razón, o ajustar la regla en `.semgrep/` |
+   | Vulnerabilidad con parche | Subir la versión en `backend/requirements.txt` (están fijadas) o en el `package-lock.json` del frontend y volver a correr el pipeline |
+   | Vulnerabilidad sin parche | No bloquea el pipeline (`--ignore-unfixed`), pero se registra y se revisa cuando exista el parche |
+   | Secreto real | **Revocarlo y rotarlo primero** y luego quitarlo del código. Borrarlo del repositorio no basta, porque queda en el historial |
+   | Secreto falso (valor de ejemplo o llave local) | Agregar una excepción con su descripción en `.gitleaks.toml`, en el mismo PR |
+
+4. **Dejar registro** en la descripción del PR: qué se encontró, qué se decidió y quién lo decidió.
+
+Si en un PR aparecen hallazgos de severidad High, la descripción del PR debe incluir el plan de remediación o la justificación VEX.
+
+### Cómo solicitar una excepción (VEX)
+
+Una excepción se pide cuando un hallazgo bloqueante no se puede corregir ahora y se puede justificar que no pone en riesgo el sistema. VEX (*Vulnerability Exploitability eXchange*) es la declaración de si una vulnerabilidad afecta realmente al producto.
+
+1. **Abrir un PR** cuya descripción incluya esta solicitud:
+
+   ```markdown
+   ## Solicitud de excepción (VEX)
+   - Hallazgo: CVE-AAAA-NNNN (Trivy) / id de la regla (Semgrep) / regla de gitleaks
+   - Componente y versión: ...
+   - Estado VEX: not_affected | affected | fixed | under_investigation
+   - Justificación: por qué no es explotable en MediTriage, o cuál es el plan de remediación
+   - Vigencia: hasta AAAA-MM-DD
+   ```
+
+2. **Registrar la excepción en el mismo PR**, en el archivo que corresponda:
+   - Trivy (`sca`): una línea en `.trivyignore`, en la raíz del repositorio, con el identificador y su vigencia, por ejemplo `CVE-AAAA-NNNN exp:AAAA-MM-DD`, con un comentario encima que explique la razón.
+   - Semgrep (`sast`): `# nosemgrep: <id-de-la-regla>` en la línea afectada, o la ruta en `.semgrepignore`.
+   - gitleaks (`secrets`): una entrada `[[allowlists]]` con su descripción en `.gitleaks.toml`.
+3. **Aprobación:** otra persona del equipo, distinta de quien la solicita, revisa y aprueba el PR. La excepción vence en la fecha indicada y debe revisarse o renovarse.
+
+### Evidencia
+
+PR con los tres checks de seguridad pasando:
+
+![Checks de seguridad pasando en el PR](docs/img/security-checks-pr.png)
+
+Documentos relacionados:
+
+- Modelo de amenazas STRIDE: [`docs/threat-model.md`](docs/threat-model.md)
+- Reglas propias de Semgrep: [`.semgrep/`](.semgrep/)
+- Configuración de gitleaks: [`.gitleaks.toml`](.gitleaks.toml)
+- SBOM del último run: artefacto `sbom` en [las ejecuciones de `security.yml`](https://github.com/triageops-ts/Equipo---MediTriage/actions/workflows/security.yml)
+
