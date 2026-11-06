@@ -23,9 +23,14 @@ jobs:
     name: sast
     runs-on: ubuntu-latest
     steps:
-      - name: Pendiente (Tarjeta 16)
-        run: echo "Aquí va Semgrep con p/owasp-top-ten y las reglas propias de .semgrep/"
-
+      - name: Descargar el código
+        uses: actions/checkout@v4
+      
+      - name: Ejecutar Semgrep (SAST)
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: "p/owasp-top-ten .semgrep/"
+          generateSarif: "1"
   # ---------------------------------------------------------------------------
   # Tarjeta 18
   # ---------------------------------------------------------------------------
