@@ -3,6 +3,10 @@ import os
 import time
 import uuid
 
+import os
+# ESTO ES UN ERROR INTENCIONAL PARA PROBAR SEMGREP
+prueba_secreto = os.environ.get("APP_ENCRYPTION_KEY", "dev-key-12345")
+
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
