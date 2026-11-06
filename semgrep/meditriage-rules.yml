@@ -1,0 +1,89 @@
+rules:
+  # ---------------------------------------------------------------------------
+  # Regla 1: nada de datos personales en los logs.
+  # MediTriage maneja datos clínicos: en los logs solo pueden ir ids opacos y banderas
+  # (ver el logger de patients.py: "Solo ids opacos y banderas: nada de nombre, RUT ni
+  # datos de contacto"). Esta regla marca cualquier llamada de logging que reciba el RUT,
+  # el nombre, el contacto o la fecha de nacimiento de una persona.
+  # ---------------------------------------------------------------------------
+  - id: meditriage-pii-en-logs
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Dato personal (RUT, nombre, contacto o fecha de nacimiento) enviado a un log.
+      En MediTriage los logs solo llevan ids opacos y banderas (por ejemplo patient_id,
+      has_contact_data). Si necesitas rastrear al paciente, registra su id, no sus datos.
+    metadata:
+      category: security
+      cwe: "CWE-532: Insertion of Sensitive Information into Log File"
+      proyecto: MediTriage
+    patterns:
+      - pattern-inside: $LOGGER.$LEVEL(...)
+      - metavariable-regex:
+          metavariable: $LOGGER
+          regex: (?i)^(_?logger|_?log|logging)$
+      - metavariable-regex:
+          metavariable: $LEVEL
+          regex: ^(debug|info|warning|warn|error|exception|critical)$
+      - pattern: $PII
+      - metavariable-regex:
+          metavariable: $PII
+          # Campos que identifican a una persona (con o sin prefijo: rut, data.rut,
+          # paciente.email, ...). "name"/"nombre" solo si cuelgan de un objeto de persona,
+          # para no marcar cosas como model.name.
+          regex: >-
+            (?ix)^(?:[\w\.]+\.)?(?:rut|rut_formateado|rut_normalizado|nombre_completo|
+            fecha_nacimiento|birth_date|email|correo|phone|telefono|address|direccion|
+            password|contrasena|contraseña)$
+            |^(?:data|paciente|patient|usuario|user|payload|body)\.(?:name|nombre)$
+            |^(?:nombre|patient_name|nombre_paciente)$
+      # Usos que no exponen el dato: bool(data.email), len(data.phone) o pasarlo por una
+      # función de enmascarado/anonimización.
+      - pattern-not-inside: bool(...)
+      - pattern-not-inside: len(...)
+      - pattern-not-inside:
+          patterns:
+            - pattern: $MASK(...)
+            - metavariable-regex:
+                metavariable: $MASK
+                regex: (?i).*(mask|enmascar|redact|sanitiz|anonim).*
+
+  # ---------------------------------------------------------------------------
+  # Regla 2: los secretos viven solo en variables de entorno, sin valor por defecto.
+  # db.py ya sigue esta convención: encryption_key() lanza un error si falta
+  # APP_ENCRYPTION_KEY. Un valor por defecto ("dev-key") o un secreto escrito en el código
+  # haría que la app arranque "bien" con una clave conocida por cualquiera que lea el repo.
+  # ---------------------------------------------------------------------------
+  - id: meditriage-secreto-en-codigo
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Secreto con valor por defecto o escrito en el código. En MediTriage las claves
+      (APP_ENCRYPTION_KEY, DATABASE_URL, API key de Anthropic) se leen solo de variables de
+      entorno y, si faltan, la app debe fallar (como encryption_key() en db.py), nunca usar
+      un valor de reserva.
+    metadata:
+      category: security
+      cwe: "CWE-798: Use of Hard-coded Credentials"
+      proyecto: MediTriage
+    pattern-either:
+      # os.environ.get("APP_ENCRYPTION_KEY", "dev-key")  /  os.getenv("DATABASE_URL", "postgresql://...")
+      - patterns:
+          - pattern-either:
+              - pattern: os.environ.get($VAR, "...")
+              - pattern: os.getenv($VAR, "...")
+          - metavariable-regex:
+              metavariable: $VAR
+              regex: (?i).*(encryption_key|api_key|secret|password|token|database_url).*
+      # APP_ENCRYPTION_KEY = "..."  /  api_key="..."
+      - patterns:
+          - pattern-either:
+              - pattern: $NAME = "..."
+              - pattern: $NAME = b"..."
+              - pattern: $FUNC(..., $NAME="...", ...)
+          - metavariable-regex:
+              metavariable: $NAME
+              regex: (?i)^(app_)?(encryption_key|anthropic_api_key|api_key|secret_key|db_password|database_url)$
+          - pattern-not: $NAME = ""
+      # Claves de la API de Anthropic escritas en cualquier parte del código
+      - pattern-regex: sk-ant-[A-Za-z0-9_\-]{10,}
