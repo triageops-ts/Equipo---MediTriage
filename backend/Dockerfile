@@ -16,9 +16,19 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
 # ==========================================
-# ETAPA 2: Runtime Distroless (Debian 12 / Python 3.11)
+# ETAPA 2: Runtime (python:3.11-slim, Debian 12, con parches de seguridad al día)
 # ==========================================
-FROM gcr.io/distroless/python3-debian12:nonroot
+# Antes era distroless/python3-debian12. Se cambió porque esa imagen base no recibe
+# a tiempo los parches de Debian y container-scan (Trivy) bloqueaba por 45 CVE
+# HIGH/CRITICAL con parche disponible (libssl3, python3.11-minimal, etc.).
+FROM python:3.11-slim
+
+# Aplicar los parches de seguridad publicados por Debian y crear el usuario sin privilegios
+# (mismo uid 65532 que usaba distroless "nonroot").
+RUN apt-get update \
+    && apt-get upgrade -y --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --uid 65532 --no-create-home --shell /usr/sbin/nologin nonroot
 
 WORKDIR /app
 
@@ -39,5 +49,7 @@ ENV PYTHONUNBUFFERED=1
 
 EXPOSE 8000
 
+USER nonroot
+
 # Reutiliza el arranque de main.py (lee $PORT con fallback a 8000)
-CMD ["app/main.py"]
+CMD ["python", "app/main.py"]
