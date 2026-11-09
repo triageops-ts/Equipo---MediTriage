@@ -86,3 +86,85 @@ jobs:
             --exit-code 1 \
             --format table \
             "$IMAGE"
+
+  # ---------------------------------------------------------------------------
+  # sign-and-attest (tarjeta #14): firma keyless con Cosign + cosign verify
+  # ---------------------------------------------------------------------------
+  # Corre solo si iac-scan y container-scan pasaron. Sube la imagen a GHCR, la firma
+  # con el token OIDC de GitHub (sin llaves guardadas) y verifica la firma en el mismo job.
+  # En PRs desde forks se omite: ahí GITHUB_TOKEN no puede escribir paquetes ni pedir OIDC.
+  sign-and-attest:
+    name: sign-and-attest
+    needs: [iac-scan, container-scan]
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write   # subir la imagen a GHCR
+      id-token: write   # pedir el token OIDC con el que Cosign firma (keyless)
+    env:
+      IMAGE: ghcr.io/triageops-ts/meditriage-backend
+      COSIGN_VERSION: "v2.5.3"
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v4
+
+      - name: Configurar Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Iniciar sesión en GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Tag distinto al de ci.yml (que usa solo el SHA) para no pisar la imagen que se despliega.
+      # Lo que se firma es el digest, no el tag.
+      - name: Construir y subir la imagen
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: ghcr.io/triageops-ts/meditriage-backend:signed-${{ github.sha }}
+
+      - name: Instalar Cosign
+        uses: sigstore/cosign-installer@v3
+        with:
+          cosign-release: ${{ env.COSIGN_VERSION }}
+
+      # Firma keyless: la identidad del firmante es este workflow, certificada por Fulcio.
+      - name: Firmar la imagen (Cosign keyless)
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: cosign sign --yes "${IMAGE}@${DIGEST}"
+
+      # Verifica que la firma es de ESTE workflow y de GitHub Actions. Si no coincide, el job falla.
+      - name: Verificar la firma (cosign verify)
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          cosign verify \
+            --certificate-identity-regexp "^https://github\.com/${GITHUB_REPOSITORY}/\.github/workflows/supply-chain\.yml@" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "${IMAGE}@${DIGEST}" 2>&1 | tee cosign-verify.txt
+
+      # Deja la evidencia en el resumen del run (para la captura del PR y de la presentación).
+      - name: Publicar evidencia en el resumen
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          {
+            echo "## Firma Cosign verificada"
+            echo ""
+            echo "Imagen: \`${IMAGE}@${DIGEST}\`"
+            echo ""
+            echo '```'
+            head -n 12 cosign-verify.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # TODO #15: aquí va el paso cosign attest --type slsaprovenance (misma imagen, mismo digest).
