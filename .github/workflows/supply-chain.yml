@@ -30,6 +30,11 @@ jobs:
       - name: Descargar el código
         uses: actions/checkout@v4
 
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
       - name: Instalar Checkov
         run: pip install "checkov==${CHECKOV_VERSION}"
 
