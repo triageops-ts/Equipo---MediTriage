@@ -16,7 +16,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
 # ==========================================
-# ETAPA 2: Runtime (python:3.11-slim, Debian 12, con parches de seguridad al día)
+# ETAPA 2: Runtime (python:3.11-slim, Debian 13, con parches de seguridad al día)
 # ==========================================
 # Antes era distroless/python3-debian12. Se cambió porque esa imagen base no recibe
 # a tiempo los parches de Debian y container-scan (Trivy) bloqueaba por 45 CVE
@@ -25,9 +25,12 @@ FROM python:3.11-slim
 
 # Aplicar los parches de seguridad publicados por Debian y crear el usuario sin privilegios
 # (mismo uid 65532 que usaba distroless "nonroot").
+# setuptools y wheel solo sirven para instalar paquetes, no para ejecutar la app.
+# Se quitan porque traen copias vendorizadas con CVE HIGH (jaraco.context, wheel).
 RUN apt-get update \
     && apt-get upgrade -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
+    && pip uninstall -y setuptools wheel \
     && useradd --uid 65532 --no-create-home --shell /usr/sbin/nologin nonroot
 
 WORKDIR /app
