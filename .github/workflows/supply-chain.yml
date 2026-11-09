@@ -1,0 +1,88 @@
+name: Supply Chain
+
+# Sin filtros de rutas: los dos checks (iac-scan y container-scan) deben aparecer en todos los PRs.
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supply-chain-${{ github.ref }}
+  cancel-in-progress: true
+
+# Los dos jobs son bloqueantes: si hay hallazgos, el job falla y el PR no se puede mezclar.
+# Ninguno es tolerante a fallos: no se les permite continuar si encuentran hallazgos.
+jobs:
+  # ---------------------------------------------------------------------------
+  # iac-scan: Checkov sobre terraform/
+  # ---------------------------------------------------------------------------
+  iac-scan:
+    name: iac-scan
+    runs-on: ubuntu-latest
+    env:
+      CHECKOV_VERSION: "3.2.90"
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar Checkov
+        run: pip install "checkov==${CHECKOV_VERSION}"
+
+      # Checkov sale con código 1 si hay checks fallidos.
+      - name: Escanear terraform/ (Checkov)
+        run: |
+          checkov \
+            --directory terraform \
+            --framework terraform \
+            --compact
+
+  # ---------------------------------------------------------------------------
+  # container-scan: Trivy sobre la imagen buildeada del backend
+  # ---------------------------------------------------------------------------
+  container-scan:
+    name: container-scan
+    runs-on: ubuntu-latest
+    env:
+      # Binario oficial con verificación de checksum; no trivy-action
+      # (sus tags fueron comprometidos en marzo de 2026).
+      TRIVY_VERSION: "0.76.1"
+      IMAGE: meditriage-backend:scan
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v4
+
+      - name: Construir la imagen del backend
+        run: docker build -t "$IMAGE" -f backend/Dockerfile backend
+
+      - name: Instalar Trivy
+        run: |
+          set -euo pipefail
+          base="https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}"
+          file="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          cd "$RUNNER_TEMP"
+          curl -sSfL -O "${base}/${file}"
+          curl -sSfL -O "${base}/trivy_${TRIVY_VERSION}_checksums.txt"
+          sha256sum --ignore-missing -c "trivy_${TRIVY_VERSION}_checksums.txt"
+          tar -xzf "${file}" trivy
+          "$RUNNER_TEMP/trivy" --version
+
+      # Falla (exit 1) si la imagen tiene vulnerabilidades HIGH/CRITICAL con parche disponible.
+      - name: Escanear la imagen (Trivy)
+        run: |
+          "$RUNNER_TEMP/trivy" image \
+            --scanners vuln \
+            --severity HIGH,CRITICAL \
+            --ignore-unfixed \
+            --exit-code 1 \
+            --format table \
+            "$IMAGE"
