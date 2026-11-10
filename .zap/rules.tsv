@@ -1,0 +1,8 @@
+# Reglas de ZAP baseline para MediTriage (S10-16).
+# Formato (separado por tabuladores):  <id de la regla>  <acción>  (<nombre, solo informativo>)
+# Acciones: IGNORE = alerta aceptada y no se muestra | WARN = se muestra (por defecto) | FAIL = rompe el job
+#
+# Cómo se usa: después de cada corrida, revisar el reporte (artefacto "zap-report"). Cada alerta
+# que el equipo decida aceptar se agrega abajo con IGNORE y un comentario con el motivo.
+# Ejemplo (no activo):
+# 10049	IGNORE	(Non-Storable Content)	# motivo: respuestas de la API que no deben cachearse

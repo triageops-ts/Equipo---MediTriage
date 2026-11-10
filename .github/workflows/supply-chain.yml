@@ -88,6 +88,105 @@ jobs:
             "$IMAGE"
 
   # ---------------------------------------------------------------------------
+  # dast (tarjeta #16): OWASP ZAP baseline contra el backend levantado en el runner
+  # ---------------------------------------------------------------------------
+  # No hay un staging público al que llegar desde GitHub, así que el job levanta la imagen
+  # del backend en el propio runner y la escanea en http://localhost:8000 (hace las veces del
+  # "port-forward" de la tarjeta). El baseline es pasivo: revisa lo que responde la app, no
+  # lanza ataques.
+  # No bloquea por advertencias (-I): falla si ZAP no puede escanear (código 3) o si se
+  # dispara una regla marcada FAIL en .zap/rules.tsv. Las alertas aceptadas se documentan
+  # ahí con IGNORE. El reporte se sube siempre como artefacto.
+  dast:
+    name: dast
+    runs-on: ubuntu-latest
+    env:
+      IMAGE: meditriage-backend:dast
+      # Imagen oficial de ZAP. TODO: fijarla por digest, como se hizo con Trivy.
+      ZAP_IMAGE: ghcr.io/zaproxy/zaproxy:stable
+      TARGET: http://localhost:8000
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v4
+
+      - name: Construir la imagen del backend
+        run: docker build -t "$IMAGE" -f backend/Dockerfile backend
+
+      # Valores solo para este job. No hay base de datos: los endpoints que la usan responderán
+      # con error, pero ZAP solo revisa la superficie HTTP (cabeceras, cookies, rutas públicas).
+      # La clave de cifrado es aleatoria y desechable.
+      - name: Levantar el backend en el runner
+        run: |
+          docker run -d --name backend --network host \
+            -e PORT=8000 \
+            -e DATABASE_URL="postgresql://ci:ci@localhost:5432/ci" \
+            -e APP_ENCRYPTION_KEY="$(openssl rand -hex 16)" \
+            "$IMAGE"
+
+      # Confirma que la URL es accesible desde el runner antes de escanear.
+      - name: Esperar a que el backend responda
+        run: |
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "$TARGET/docs" || true)
+            if [ "$code" != "000" ]; then
+              echo "Backend listo (HTTP $code en $TARGET/docs)"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "El backend no respondió en 60 s. Logs del contenedor:"
+          docker logs backend
+          exit 1
+
+      # Salida de ZAP: 0 sin alertas bloqueantes, 1 si hay una regla FAIL, 3 si falló el escaneo.
+      - name: Escanear con ZAP baseline
+        run: |
+          mkdir -p zap-out
+          cp .zap/rules.tsv zap-out/rules.tsv
+          chmod 777 zap-out
+          docker run --rm --network host \
+            -v "$PWD/zap-out:/zap/wrk:rw" \
+            "$ZAP_IMAGE" \
+            zap-baseline.py \
+              -t "$TARGET/docs" \
+              -c rules.tsv \
+              -m 1 \
+              -I \
+              -r zap-report.html \
+              -J zap-report.json
+
+      # Deja las alertas en el resumen del run (para la captura del PR y de la presentación).
+      - name: Resumen de alertas
+        if: always()
+        run: |
+          {
+            echo "## ZAP baseline"
+            echo ""
+            if [ -f zap-out/zap-report.json ]; then
+              echo "| Riesgo | Alerta | Instancias |"
+              echo "|---|---|---|"
+              jq -r '.site[].alerts[] | "| \(.riskdesc) | \(.name) | \(.instances | length) |"' zap-out/zap-report.json
+            else
+              echo "No se generó el reporte de ZAP."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publicar el reporte de ZAP
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-report
+          path: |
+            zap-out/zap-report.html
+            zap-out/zap-report.json
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Logs del backend (si falló)
+        if: failure()
+        run: docker logs backend
+
+  # ---------------------------------------------------------------------------
   # sign-and-attest (tarjeta #14): firma keyless con Cosign + cosign verify
   # ---------------------------------------------------------------------------
   # Corre solo si iac-scan y container-scan pasaron. Sube la imagen a GHCR, la firma
