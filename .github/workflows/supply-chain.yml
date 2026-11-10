@@ -167,4 +167,41 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # TODO #15: aquí va el paso cosign attest --type slsaprovenance (misma imagen, mismo digest).
+      # ---------------------------------------------------------------------------
+      # TODO #15: Attestation SLSA nivel 2
+      # ---------------------------------------------------------------------------
+      - name: Generar predicate de provenance
+        run: |
+          cat <<EOF > provenance.json
+          {
+            "builder": {
+              "id": "https://github.com/actions/runner"
+            },
+            "buildType": "https://github.com/actions/actions",
+            "invocation": {
+              "configSource": {
+                "uri": "git+https://github.com/${GITHUB_REPOSITORY}.git",
+                "digest": {
+                  "sha1": "${GITHUB_SHA}"
+                },
+                "entryPoint": ".github/workflows/supply-chain.yml"
+              }
+            }
+          }
+          EOF
+
+      - name: Adjuntar attestation SLSA a la imagen (cosign attest)
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          cosign attest --yes --type slsaprovenance --predicate provenance.json "${IMAGE}@${DIGEST}"
+
+      - name: Verificar attestation (cosign verify-attestation)
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          cosign verify-attestation \
+            --type slsaprovenance \
+            --certificate-identity-regexp "^https://github\.com/${GITHUB_REPOSITORY}/\.github/workflows/supply-chain\.yml@" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "${IMAGE}@${DIGEST}"
