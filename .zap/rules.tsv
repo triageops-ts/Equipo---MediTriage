@@ -1,8 +1,27 @@
 # Reglas de ZAP baseline para MediTriage (S10-16).
-# Formato (separado por tabuladores):  <id de la regla>  <acción>  (<nombre, solo informativo>)
+# Formato (separado por tabuladores):  <id de la regla>  <accion>  (<nombre, solo informativo>)
 # Acciones: IGNORE = alerta aceptada y no se muestra | WARN = se muestra (por defecto) | FAIL = rompe el job
 #
-# Cómo se usa: después de cada corrida, revisar el reporte (artefacto "zap-report"). Cada alerta
+# Como se usa: despues de cada corrida, revisar el reporte (artefacto "zap-report"). Cada alerta
 # que el equipo decida aceptar se agrega abajo con IGNORE y un comentario con el motivo.
-# Ejemplo (no activo):
-# 10049	IGNORE	(Non-Storable Content)	# motivo: respuestas de la API que no deben cachearse
+
+# Alertas aceptadas tras el primer reporte (run Supply Chain #10, PR #54).
+# El escaneo parte de /docs (Swagger UI de FastAPI), asi que estas alertas describen esa pagina
+# y no la API de pacientes. Se aceptan porque /docs es solo documentacion; si se desactiva en
+# produccion (docs_url=None) dejan de aplicar.
+
+# Swagger UI carga sus scripts desde un CDN (jsdelivr) sin atributo integrity.
+90003	IGNORE	(Sub Resource Integrity Attribute Missing)
+10017	IGNORE	(Cross-Domain JavaScript Source File Inclusion)
+# Aislamiento entre origenes (COEP/COOP/CORP): aplica a paginas con contenido embebido, no a respuestas JSON.
+90004	IGNORE	(Insufficient Site Isolation Against Spectre Vulnerability)
+# Informativas: la pagina /docs es una app web moderna y sus archivos estaticos son cacheables.
+10109	IGNORE	(Modern Web Application)
+10049	IGNORE	(Storable and Cacheable Content)
+
+# NO se aceptan (quedan como WARN): faltan cabeceras de seguridad que si afectan a la API.
+# Pendiente: agregar un middleware que las envie en todas las respuestas.
+# 10038 Content Security Policy (CSP) Header Not Set
+# 10020 Missing Anti-clickjacking Header
+# 10021 X-Content-Type-Options Header Missing
+# 10063 Permissions Policy Header Not Set
