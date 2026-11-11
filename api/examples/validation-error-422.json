@@ -1,14 +1,13 @@
-
 {
   "type": "https://api.meditriage.com/problems/validation-error",
   "title": "Error de validación",
   "status": 422,
-  "detail": "La frecuencia cardiaca enviada no cumple las reglas de validación.",
-  "instance": "/api/v1/triages",
+  "detail": "signos_vitales.frecuencia_cardiaca: Valor fuera de rango fisiológico: debe estar entre 20 y 300 latidos por minuto.",
+  "instance": "/api/v1/triage/formulario",
   "errors": [
     {
-      "field": "frecuencia_cardiaca",
-      "message": "Debe estar entre 20 y 250."
+      "field": "signos_vitales.frecuencia_cardiaca",
+      "message": "Valor fuera de rango fisiológico: debe estar entre 20 y 300 latidos por minuto."
     }
   ]
 }

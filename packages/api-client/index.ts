@@ -1,55 +1,61 @@
-export type NivelEsi = 1 | 2 | 3 | 4 | 5;
-export type NivelConciencia = 'Alerta' | 'Verbal' | 'Dolor' | 'Inconsciente';
-export type EstadoTriage = 'esperando' | 'atendiendo' | 'dado_de_alta';
+// Cliente TypeScript de la API de MediTriage.
+//
+// `schema.d.ts` se GENERA desde api/openapi.yaml y no se edita a mano:
+//   cd packages/api-client && npm run generate
+// Este archivo solo exporta los tipos con los mismos nombres que tienen en el contrato.
 
-export interface ResumenPaciente {
-  id_paciente: string;
-  edad: number;
-  sexo_biologico: 'masculino' | 'femenino';
-}
+import type { components, operations, paths } from "./schema";
 
-export interface EntradaSintoma {
-  codigo_sintoma: string;
-  severidad: 'leve' | 'moderada' | 'severa';
-  tiempo_evolucion_horas?: number;
-}
+export type { components, operations, paths };
 
-export interface EntradaSintomas {
-  presion_sistolica: number;
-  presion_diastolica: number;
-  frecuencia_cardiaca: number;
-  frecuencia_respiratoria: number;
-  temperatura: number;
-  saturacion_oxigeno: number;
-  escala_dolor: number;
-  nivel_conciencia: NivelConciencia;
-  sintomas?: EntradaSintoma[];
-  antecedentes_relevantes_codificados?: Record<string, boolean>;
-}
+type Schemas = components["schemas"];
 
-export interface RecomendacionIA {
-  nivel_esi_sugerido: NivelEsi;
-  justificacion_ia: string;
-  modelo_usado?: string;
-  tiempo_respuesta?: string;
-}
+// --- Enums compartidos ---
+export type EsiLevel = Schemas["EsiLevel"];
+export type NivelConciencia = Schemas["NivelConciencia"];
+export type SeveridadSintoma = Schemas["SeveridadSintoma"];
+export type EstadoEpisodio = Schemas["EstadoEpisodio"];
+export type SexoBiologico = Schemas["SexoBiologico"];
+export type RolUsuario = Schemas["RolUsuario"];
 
-export interface EvaluacionTriage {
-  id_triage: string;
-  paciente: ResumenPaciente;
-  estado: EstadoTriage;
-  sintomas: EntradaSintomas;
-  recomendacion_ia: RecomendacionIA;
-  nivel_esi_final?: NivelEsi | null;
-}
+// --- Sistema y autenticación ---
+export type HealthResponse = Schemas["HealthResponse"];
+export type LoginInput = Schemas["LoginInput"];
+export type LoginResponse = Schemas["LoginResponse"];
 
-export interface ProblemaError {
-  tipo?: string;
-  titulo: string;
-  estado: number;
-  detalle?: string;
-  instancia?: string;
-  errores?: Array<{ campo: string; mensaje: string }>;
-}
+// --- Pacientes ---
+export type PatientInput = Schemas["PatientInput"];
+export type Patient = Schemas["Patient"];
+export type PatientFound = Schemas["PatientFound"];
+export type PatientSummary = Schemas["PatientSummary"];
 
-export const URL_BASE_API = "https://api.meditriage.com/v1";
+// --- Triage ---
+export type SignosVitalesInput = Schemas["SignosVitalesInput"];
+export type SintomaInput = Schemas["SintomaInput"];
+export type FormularioClinicoInput = Schemas["FormularioClinicoInput"];
+export type FormularioClinicoResponse = Schemas["FormularioClinicoResponse"];
+export type ClasificacionIA = Schemas["ClasificacionIA"];
+export type DecisionInput = Schemas["DecisionInput"];
+export type DecisionResponse = Schemas["DecisionResponse"];
+export type ColaTriageItem = Schemas["ColaTriageItem"];
+export type SalaEsperaEntry = Schemas["SalaEsperaEntry"];
+
+// --- Auditoría y errores ---
+export type AuditLogEntry = Schemas["AuditLogEntry"];
+export type Problem = Schemas["Problem"];
+
+// --- Rutas (relativas a la URL base del servidor) ---
+export const URL_BASE_API = "https://api.meditriage.com/api/v1";
+export const URL_BASE_LOCAL = "http://localhost:8000/api/v1";
+
+export const RUTAS = {
+  health: "/health",
+  login: "/auth/login",
+  pacientes: "/patients",
+  formulario: "/triage/formulario",
+  evaluar: (episodioId: string) => `/triage/${episodioId}/evaluate`,
+  decision: (episodioId: string) => `/triage/${episodioId}/decision`,
+  cola: "/triage/cola",
+  salaEspera: "/sala-espera",
+  auditLogs: "/audit-logs",
+} as const;
