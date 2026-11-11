@@ -1,0 +1,42 @@
+customRules:
+  meditriage-rules.yaml: |-
+    - rule: MediTriage Shell Execution
+      desc: Detecta la ejecución de shells en el namespace de MediTriage
+      condition: >
+        spawned_process and container
+        and k8s.ns.name = "triageops"
+        and proc.name in (sh, bash, dash, ash, zsh)
+      output: >
+        MediTriage: ejecucion de shell detectada
+        (command=%proc.cmdline user=%user.name
+        container=%container.name image=%container.image)
+      priority: WARNING
+      tags: [container, process, shell, meditriage]
+
+    - rule: MediTriage Sensitive Token Read
+      desc: Detecta accesos de lectura al token de ServiceAccount de MediTriage
+      condition: >
+        evt.type in (open, openat, openat2)
+        and evt.is_open_read=true
+        and fd.name = /var/run/secrets/kubernetes.io/serviceaccount/token
+        and container.image contains "meditriage-backend"
+      output: >
+        MediTriage: acceso al token de ServiceAccount detectado
+        (file=%fd.name command=%proc.cmdline
+        container=%container.name image=%container.image)
+      priority: WARNING
+      tags: [container, filesystem, secrets, kubernetes, meditriage]
+
+    - rule: MediTriage Temporary File Write
+      desc: Detecta escrituras en archivos temporales del backend de MediTriage
+      condition: >
+        evt.type in (open, openat, openat2)
+        and evt.is_open_write=true
+        and fd.name contains "/tmp/meditriage-falco-test"
+        and container.image contains "meditriage-backend"
+      output: >
+        MediTriage: escritura de archivo temporal detectada
+        (file=%fd.name command=%proc.cmdline
+        container=%container.name image=%container.image)
+      priority: WARNING
+      tags: [container, filesystem, write, meditriage]

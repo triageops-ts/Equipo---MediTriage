@@ -5,7 +5,7 @@ metadata:
   name: require-image-signature
 spec:
   validationActions:
-    - Audit
+    - Deny
 
   failurePolicy: Ignore
 
@@ -60,3 +60,6 @@ spec:
           verifyImageSignatures(image, [attestors.cosign])
         ).all(e, e > 0)
       message: 'La imagen de MediTriage debe tener una firma Cosign keyless valida del workflow autorizado.'
+  credentials:
+    secrets:
+      - ghcr-pull-secret
