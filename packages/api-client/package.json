@@ -1,0 +1,10 @@
+{
+  "name": "@meditriage/api-client",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Tipos TypeScript generados desde api/openapi.yaml",
+  "types": "index.ts",
+  "scripts": {
+    "generate": "npx --yes openapi-typescript@7.13.0 ../../api/openapi.yaml -o schema.d.ts"
+  }
+}

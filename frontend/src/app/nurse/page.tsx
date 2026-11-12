@@ -299,7 +299,6 @@ export default function NurseTriagePage() {
     }
   };
 
-  const handleNuevoIngreso = () => {
 const handleNuevoIngreso = () => {
   limpiarDatosPersonales();
   setResultado(null);

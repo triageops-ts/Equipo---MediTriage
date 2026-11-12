@@ -8,8 +8,9 @@
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const RAIZ = new URL("../src", import.meta.url).pathname;
+const RAIZ = fileURLToPath(new URL("../src", import.meta.url));
 
 const PROHIBIDO = [
   [/\b(localStorage|sessionStorage|indexedDB|openDatabase)\b/, "almacenamiento del navegador"],
