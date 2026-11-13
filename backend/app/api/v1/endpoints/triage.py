@@ -1,4 +1,3 @@
-
 import uuid
 from uuid import UUID
 
@@ -6,6 +5,7 @@ import psycopg
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.db import get_conn
+from app.core.realtime import EVENTO_EVALUACION_CONFIRMADA, publicar_evento
 from app.core.sanitizer import sanitize_symptoms_text
 from app.schemas.decision import (
     JUSTIFICACION_MIN_CARACTERES,
@@ -251,6 +251,20 @@ def registrar_decision(
                 detail="Falta usuario_id: la decisión debe indicar quién la toma.",
             ) from None
         raise
+
+    # La decisión ya quedó guardada (la transacción terminó): recién ahora se avisa
+    # al tablero. Si Redis falla, publicar_evento solo deja un aviso en el log.
+    publicar_evento(
+        EVENTO_EVALUACION_CONFIRMADA,
+        {
+            "decision_id": str(decision_id),
+            "episodio_id": str(episodio_id),
+            "usuario_id": str(data.usuario_id) if data.usuario_id else None,
+            "nivel_esi_definitivo": data.nivel_esi_final,
+            "es_sobrescritura": not coincide,
+            "fecha_hora_decision": fecha_decision.isoformat(),
+        },
+    )
 
     return DecisionResponse(
         decision_id=decision_id,
