@@ -10,7 +10,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.api.v1.endpoints import health, patients, triage
+from app.api.v1.endpoints import audit, health, patients, triage
 from app.core.logging_config import configure_logging, request_id_var, ruta_sin_parametros
 
 # Factor 11: logs JSON a stdout con PII enmascarada (ver app/core/logging_config.py).
@@ -26,6 +26,7 @@ app = FastAPI(
 app.include_router(health.router, prefix="/api/v1")
 app.include_router(patients.router, prefix="/api/v1")
 app.include_router(triage.router, prefix="/api/v1")
+app.include_router(audit.router, prefix="/api/v1")
 
 @app.middleware("http")
 async def log_requests(request: Request, call_next):

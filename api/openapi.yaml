@@ -313,6 +313,32 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
+    /audit-logs/client-events:
+    post:
+      tags: [Auditoría]
+      summary: Registra que el navegador no pudo guardar la decisión de la enfermera
+      operationId: createClientAuditEvent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [episodio_id, tipo_error, intentos, recuperado, primer_fallo_cliente]
+              properties:
+                episodio_id: { type: string, format: uuid }
+                usuario_id: { type: string, format: uuid }
+                tipo_error: { type: string, enum: [red, timeout_servidor, servidor_no_disponible] }
+                intentos: { type: integer, minimum: 1, maximum: 50 }
+                recuperado: { type: boolean }
+                primer_fallo_cliente: { type: string, format: date-time }
+      responses:
+        '201': { description: Evento registrado en la bitácora }
+        '404': { description: Episodio o usuario inexistente }
+        '422':
+          $ref: '#/components/responses/ValidationError'        
+
   /audit-logs:
     get:
       tags:

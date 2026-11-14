@@ -15,6 +15,7 @@ export const RUTAS = {
   cola: "/api/v1/triage/cola",
   salaEspera: "/api/v1/sala-espera",
   auditLogs: "/api/v1/audit-logs",
+  auditEventosCliente: "/api/v1/audit-logs/client-events",
 } as const;
 
 // --- Tipos compartidos ---
@@ -196,6 +197,18 @@ export interface ErrorCampo {
   message: string;
 }
 
+// --- Aviso de fallo de guardado (POST /audit-logs/client-events) ---
+export type TipoErrorConexion = "red" | "timeout_servidor" | "servidor_no_disponible";
+
+export interface EventoFalloGuardado {
+  episodio_id: string;
+  usuario_id?: string;
+  tipo_error: TipoErrorConexion;
+  intentos: number;
+  recuperado: boolean;
+  primer_fallo_cliente: string; // fecha ISO del navegador (informativa)
+}
+
 /** Error devuelto por el backend (formato Problem JSON). */
 export class ApiError extends Error {
   status: number;
@@ -316,4 +329,9 @@ export function obtenerSalaEspera(): Promise<SalaEsperaEntry[]> {
 /** GET /audit-logs */
 export function obtenerAuditLogs(filtros: FiltrosAuditoria = {}): Promise<AuditLogEntry[]> {
   return pedir(conQuery(RUTAS.auditLogs, { ...filtros }));
+}
+
+/** POST /audit-logs/client-events */
+export function reportarFalloGuardado(datos: EventoFalloGuardado): Promise<unknown> {
+  return pedir(RUTAS.auditEventosCliente, { method: "POST", body: JSON.stringify(datos) });
 }
