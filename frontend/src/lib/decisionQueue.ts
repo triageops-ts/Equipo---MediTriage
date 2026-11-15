@@ -121,9 +121,15 @@ export async function guardarConReintentos(
       return { estado: "guardado", decision, intentos };
     } catch (e) {
       if (!esFalloDeConexion(e)) {
-        // 409 después de un fallo de conexión: el intento anterior sí llegó al servidor
-        // y solo se perdió la respuesta. La decisión ya está guardada.
-        if (e instanceof ApiError && e.status === 409 && ultimoError) {
+        // 409 "ya tiene una decisión" después de un fallo de conexión: el intento anterior
+        // sí llegó al servidor y solo se perdió la respuesta, así que ya está guardada.
+        // Otros 409 (por ejemplo, "aún no hay sugerencia de la IA") NO son guardado.
+        if (
+          e instanceof ApiError &&
+          e.status === 409 &&
+          ultimoError &&
+          e.message.includes("ya tiene una decisión")
+        ) {
           encolarAviso(op, ultimoError, intentos, true, primerFallo.hora);
           return { estado: "guardado", decision: null, intentos };
         }
