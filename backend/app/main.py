@@ -1,8 +1,10 @@
+from contextlib import asynccontextmanager
 import logging
 import os
 import time
 import uuid
 
+import psycopg
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -10,16 +12,29 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.v1.endpoints import health, patients, triage, ws
+from app.core.canary import verificar_clave_cifrado
 from app.core.logging_config import configure_logging, request_id_var, ruta_sin_parametros
 
 # Factor 11: logs JSON a stdout con PII enmascarada (ver app/core/logging_config.py).
 configure_logging(os.environ.get("LOG_LEVEL", "INFO").upper())
 logger = logging.getLogger("meditriage.api")
 
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    # Si la clave no coincide con los datos cifrados, el backend no arranca.
+    url = os.environ.get("DATABASE_URL")
+    if not url:
+        raise RuntimeError("Falta la variable de entorno DATABASE_URL.")
+    with psycopg.connect(url) as conn:
+        verificar_clave_cifrado(conn)
+    yield
+
+
 app = FastAPI(
     title="MediTriage API",
     version="0.1.0",
-    description="Backend base para MediTriage"
+    description="Backend base para MediTriage",
+    lifespan=lifespan,
 )
 
 app.include_router(health.router, prefix="/api/v1")
