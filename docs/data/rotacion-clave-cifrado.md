@@ -90,4 +90,4 @@ WHERE rut IS NOT NULL;
 - `backend/migrations/db.py` era una copia idéntica de `backend/app/db.py` que
   nadie importaba; se eliminó.
 - Las tablas `clave_canario` y la columna `rut_hash` existen una vez aplicadas las
-  migraciones `0005` y `0006`.
+  migraciones 0006 y 0007.
