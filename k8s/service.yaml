@@ -15,3 +15,7 @@ spec:
     - name: http
       port: 80
       targetPort: 8000
+    # Solo lo usa el ServiceMonitor. El Ingress apunta al puerto 80, así que /metrics no se publica.
+    - name: metrics
+      port: 9464
+      targetPort: metrics

@@ -23,7 +23,11 @@ spec:
         - name: backend
           image: meditriage-backend@sha256:bacad97b3abf0d0739e227dcc4970f93c85ab35e834a20c0f423beadf5da0cac
           ports:
-            - containerPort: 8000
+            - name: http
+              containerPort: 8000
+            # /metrics de Prometheus (OpenTelemetry). No pasa por el Ingress.
+            - name: metrics
+              containerPort: 9464
           envFrom:
             - configMapRef:
                 name: meditriage-backend-config

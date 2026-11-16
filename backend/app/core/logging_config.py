@@ -8,6 +8,8 @@ Reglas:
   se reemplazan antes de escribirse. Incluye mensajes, campos extra y tracebacks.
 - Los campos extra cuyo nombre es PII (rut, nombre, email, ...) se reemplazan
   completos, sin importar su valor.
+- Si hay un span de OpenTelemetry activo, cada línea lleva `trace_id` (32 hex) y `span_id`
+  (16 hex) para correlacionar el log con su trace (app/core/telemetry.py).
 - Este log es técnico. El audit log de negocio vive aparte, en Postgres.
 """
 import json
@@ -17,6 +19,8 @@ import sys
 from contextvars import ContextVar
 from datetime import datetime, timezone
 from typing import Any
+
+from opentelemetry import trace
 
 MASCARA = "[REDACTED]"
 
@@ -83,6 +87,10 @@ class JsonFormatter(logging.Formatter):
             "message": mascarar_texto(record.getMessage()),
             "request_id": request_id_var.get(),
         }
+        contexto = trace.get_current_span().get_span_context()
+        if contexto.is_valid:
+            evento["trace_id"] = format(contexto.trace_id, "032x")
+            evento["span_id"] = format(contexto.span_id, "016x")
         for campo, valor in record.__dict__.items():
             if campo in _ESTANDAR or campo.startswith("_"):
                 continue
