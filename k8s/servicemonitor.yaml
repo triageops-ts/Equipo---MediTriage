@@ -1,0 +1,26 @@
+# Le dice a Prometheus (kube-prometheus-stack) que scrapee /metrics del backend.
+# El operador solo toma los ServiceMonitor que tengan la etiqueta `release` igual al nombre
+# del release de Helm del stack. Si el release no se llama "kube-prometheus-stack", cambiarla
+# (se ve con: helm list -A  o  kubectl get prometheus -A -o yaml | grep -A3 serviceMonitorSelector).
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: meditriage-backend
+  namespace: triageops
+  labels:
+    app: meditriage-backend
+    part-of: meditriage
+    tier: backend
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      app: meditriage-backend
+  namespaceSelector:
+    matchNames:
+      - triageops
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 15s
+      scrapeTimeout: 10s
