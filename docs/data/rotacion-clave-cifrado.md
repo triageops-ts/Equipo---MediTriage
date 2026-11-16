@@ -91,3 +91,9 @@ WHERE rut IS NOT NULL;
   nadie importaba; se eliminó.
 - Las tablas `clave_canario` y la columna `rut_hash` existen una vez aplicadas las
   migraciones 0006 y 0007.
+
+## Kubernetes
+- El Secret `triageops-secrets` (namespace `triageops-dev`) lo crea Terraform; Argo CD no lo administra.
+- Lleva `APP_ENCRYPTION_KEY` y `APP_RUT_HASH_KEY`, claves propias de Kubernetes (distintas de las de Neon), guardadas en el gestor de contraseñas del equipo.
+- Se agregaron con `kubectl patch ... --patch-file`. Un `terraform apply` posterior rehace el Secret y borra estas claves: hay que volver a agregarlas.
+- `triageops-prod` aún no existe en el cluster local; al crearlo, repetir lo mismo.
