@@ -25,8 +25,14 @@ async def lifespan(_: FastAPI):
     url = os.environ.get("DATABASE_URL")
     if not url:
         raise RuntimeError("Falta la variable de entorno DATABASE_URL.")
-    with psycopg.connect(url) as conn:
-        verificar_clave_cifrado(conn)
+    try:
+        conn = psycopg.connect(url)
+    except psycopg.OperationalError:
+        # Sin base de datos no hay datos cifrados que comprobar (por ejemplo, en el DAST).
+        logger.warning("key_check_skipped_db_unreachable")
+    else:
+        with conn:
+            verificar_clave_cifrado(conn)
     yield
 
 
