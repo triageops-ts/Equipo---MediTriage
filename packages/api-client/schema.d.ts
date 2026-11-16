@@ -24,6 +24,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Usuario de la sesión actual
+         * @description Devuelve el id y el rol del token. Lo usa el frontend, que no puede leer la cookie httpOnly, para saber qué vistas puede abrir.
+         */
+        get: operations["sesionActual"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cierra la sesión
+         * @description Borra la cookie `access_token`. No requiere token.
+         */
+        post: operations["logout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/login": {
         parameters: {
             query?: never;
@@ -35,7 +75,7 @@ export interface paths {
         put?: never;
         /**
          * Inicia sesión
-         * @description Valida las credenciales del personal de salud y entrega un token JWT para usar como `Bearer` en el resto de los endpoints. No requiere token.
+         * @description Valida las credenciales del personal de salud y entrega un token JWT con el rol y el id del usuario. El token viaja en el cuerpo y también en una cookie `access_token` (httpOnly, SameSite=Strict); el resto de los endpoints aceptan la cookie o el header `Authorization Bearer`. No requiere token.
          */
         post: operations["login"];
         delete?: never;
@@ -247,6 +287,11 @@ export interface components {
             usuario_id: string;
             rol: components["schemas"]["RolUsuario"];
         };
+        SesionResponse: {
+            /** Format: uuid */
+            usuario_id: string;
+            rol: components["schemas"]["RolUsuario"];
+        };
         /** @description Body de POST /patients. `has_consent` debe ser true (consentimiento informado firmado antes de registrar). */
         PatientInput: {
             /**
@@ -354,11 +399,6 @@ export interface components {
              * @description Paciente ya registrado (POST /patients).
              */
             patient_id: string;
-            /**
-             * Format: uuid
-             * @description Temporal hasta que exista el login. Quién registra el formulario; con login se toma del token.
-             */
-            usuario_id?: string;
             /** @description Texto libre. El backend lo sanitiza antes de guardarlo. */
             motivo_consulta?: string;
             signos_vitales: components["schemas"]["SignosVitalesInput"];
@@ -411,11 +451,6 @@ export interface components {
              * @example Dificultad respiratoria severa no captada en el triage inicial.
              */
             justificacion?: string;
-            /**
-             * Format: uuid
-             * @description Temporal hasta que exista el login. Quién toma la decisión; con login se toma del token.
-             */
-            usuario_id?: string;
         };
         DecisionResponse: {
             /** Format: uuid */
@@ -659,6 +694,47 @@ export interface operations {
             500: components["responses"]["InternalServerError"];
         };
     };
+    sesionActual: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sesión válida */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SesionResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    logout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sesión cerrada */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            500: components["responses"]["InternalServerError"];
+        };
+    };
     login: {
         parameters: {
             query?: never;
@@ -708,6 +784,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             422: components["responses"]["ValidationError"];
             500: components["responses"]["InternalServerError"];
         };
@@ -738,6 +815,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["ValidationError"];
             500: components["responses"]["InternalServerError"];
@@ -769,6 +847,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["ValidationError"];
             500: components["responses"]["InternalServerError"];
@@ -833,6 +912,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["ValidationError"];

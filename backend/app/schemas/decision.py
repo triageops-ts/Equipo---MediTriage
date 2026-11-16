@@ -21,8 +21,6 @@ class DecisionInput(BaseModel):
     # Opcional si confirma lo que sugirió la IA; obligatoria si lo cambia
     # (esa regla depende del nivel sugerido, así que se valida en el endpoint).
     justificacion: Optional[str] = Field(default=None, max_length=1000)
-    # Temporal hasta que exista el login: quién toma la decisión.
-    usuario_id: Optional[UUID] = None
 
     @field_validator("nivel_esi_final")
     @classmethod

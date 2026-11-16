@@ -9,6 +9,7 @@ import uuid
 import pytest
 from fastapi.testclient import TestClient
 
+from app.core.security import crear_token
 from app.main import app
 
 pytestmark = pytest.mark.skipif(
@@ -16,7 +17,9 @@ pytestmark = pytest.mark.skipif(
     reason="requiere DATABASE_URL y APP_ENCRYPTION_KEY",
 )
 
-client = TestClient(app)
+# Los endpoints exigen sesión: se firma un token de enfermero (no consulta la base).
+_TOKEN = crear_token(uuid.uuid4(), "enfermero")[0]
+client = TestClient(app, headers={"Authorization": f"Bearer {_TOKEN}"})
 
 
 def _rut_unico() -> str:

@@ -15,11 +15,20 @@ from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
 from app.core import realtime
+from app.core.security import crear_token
 from app.db import get_conn
 from app.main import app
 
 client = TestClient(app)
 URL_WS = "/api/v1/ws/tablero"
+
+
+def _bearer(rol: str) -> dict:
+    return {"Authorization": f"Bearer {crear_token(uuid.uuid4(), rol)[0]}"}
+
+
+HDR_MEDICO = _bearer("medico")  # el tablero es del médico
+HDR_ENFERMERO = _bearer("enfermero")  # quien registra la decisión
 
 requiere_redis = pytest.mark.skipif(
     not os.environ.get("REDIS_URL"), reason="requiere REDIS_URL"
@@ -55,7 +64,7 @@ def _recibir(ws):
 def test_sin_redis_url_el_canal_cierra_con_1011(monkeypatch):
     monkeypatch.delenv("REDIS_URL", raising=False)
 
-    with client.websocket_connect(URL_WS) as ws:
+    with client.websocket_connect(URL_WS, headers=HDR_MEDICO) as ws:
         with pytest.raises(WebSocketDisconnect) as error:
             ws.receive_json()
 
@@ -65,11 +74,35 @@ def test_sin_redis_url_el_canal_cierra_con_1011(monkeypatch):
 def test_con_redis_caido_el_canal_cierra_con_1011(monkeypatch):
     monkeypatch.setenv("REDIS_URL", "redis://127.0.0.1:1/0")  # puerto sin Redis
 
-    with client.websocket_connect(URL_WS) as ws:
+    with client.websocket_connect(URL_WS, headers=HDR_MEDICO) as ws:
         with pytest.raises(WebSocketDisconnect) as error:
             ws.receive_json()
 
     assert error.value.code == 1011
+
+
+# --- Autenticación ------------------------------------------------------------------------
+
+
+def test_sin_token_el_canal_se_cierra_con_1008():
+    with pytest.raises(WebSocketDisconnect) as error:
+        with client.websocket_connect(URL_WS):
+            pass
+    assert error.value.code == 1008
+
+
+def test_con_rol_incorrecto_el_canal_se_cierra_con_1008():
+    with pytest.raises(WebSocketDisconnect) as error:
+        with client.websocket_connect(URL_WS, headers=HDR_ENFERMERO):
+            pass
+    assert error.value.code == 1008
+
+
+def test_con_token_invalido_el_canal_se_cierra_con_1008():
+    with pytest.raises(WebSocketDisconnect) as error:
+        with client.websocket_connect(URL_WS, headers={"Authorization": "Bearer basura"}):
+            pass
+    assert error.value.code == 1008
 
 
 # --- Con el Redis real -------------------------------------------------------------------
@@ -77,7 +110,7 @@ def test_con_redis_caido_el_canal_cierra_con_1011(monkeypatch):
 
 @requiere_redis
 def test_al_conectar_avisa_que_el_canal_esta_listo():
-    with client.websocket_connect(URL_WS) as ws:
+    with client.websocket_connect(URL_WS, headers=HDR_MEDICO) as ws:
         aviso = _recibir(ws)
 
     assert aviso == {"event_type": "conexion.lista", "canal": "triage:eventos"}
@@ -85,7 +118,7 @@ def test_al_conectar_avisa_que_el_canal_esta_listo():
 
 @requiere_redis
 def test_el_cliente_recibe_el_evento_publicado():
-    with client.websocket_connect(URL_WS) as ws:
+    with client.websocket_connect(URL_WS, headers=HDR_MEDICO) as ws:
         assert _recibir(ws)["event_type"] == "conexion.lista"
 
         assert realtime.publicar_evento("triage.evaluacion.confirmada", {"episodio_id": "e1"})
@@ -97,7 +130,7 @@ def test_el_cliente_recibe_el_evento_publicado():
 
 @requiere_redis
 def test_varios_tableros_reciben_el_mismo_evento():
-    with client.websocket_connect(URL_WS) as ws1, client.websocket_connect(URL_WS) as ws2:
+    with client.websocket_connect(URL_WS, headers=HDR_MEDICO) as ws1, client.websocket_connect(URL_WS, headers=HDR_MEDICO) as ws2:
         assert _recibir(ws1)["event_type"] == "conexion.lista"
         assert _recibir(ws2)["event_type"] == "conexion.lista"
 
@@ -109,7 +142,7 @@ def test_varios_tableros_reciben_el_mismo_evento():
 
 @requiere_redis
 def test_lo_que_envia_el_cliente_se_ignora_y_el_canal_sigue_vivo():
-    with client.websocket_connect(URL_WS) as ws:
+    with client.websocket_connect(URL_WS, headers=HDR_MEDICO) as ws:
         assert _recibir(ws)["event_type"] == "conexion.lista"
 
         ws.send_text("hola")
@@ -137,6 +170,8 @@ class _CursorFalso:
         self.sql = sql
 
     def fetchone(self):
+        if "usuario_staff" in self.sql:
+            return (1,)  # el usuario del token existe y está activo
         if "FOR UPDATE" in self.sql:
             return (1,)
         if "clasificacion_ia" in self.sql:
@@ -159,11 +194,12 @@ def test_al_registrar_la_decision_el_tablero_recibe_el_evento():
     app.dependency_overrides[get_conn] = lambda: _ConexionFalsa()
     episodio_id = str(uuid.uuid4())
 
-    with client.websocket_connect(URL_WS) as ws:
+    with client.websocket_connect(URL_WS, headers=HDR_MEDICO) as ws:
         assert _recibir(ws)["event_type"] == "conexion.lista"
 
         r = client.post(
             f"/api/v1/triage/{episodio_id}/decision",
+            headers=HDR_ENFERMERO,
             json={
                 "nivel_esi_final": 2,
                 "justificacion": "Dificultad respiratoria no captada en triage.",
