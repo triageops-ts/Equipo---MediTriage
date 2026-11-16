@@ -26,17 +26,18 @@ async def lifespan(_: FastAPI):
     # Si la clave no coincide con los datos cifrados, el backend no arranca.
     url = os.environ.get("DATABASE_URL")
     if not url:
-        raise RuntimeError("Falta la variable de entorno DATABASE_URL.")
-    try:
-        conn = psycopg.connect(url)
-    except psycopg.OperationalError:
-        # Sin base de datos no hay datos cifrados que comprobar (por ejemplo, en el DAST).
-        logger.warning("key_check_skipped_db_unreachable")
+        # Sin base configurada no hay datos cifrados que comprobar (por ejemplo, el despliegue de práctica).
+        logger.warning("key_check_skipped_no_database_url")
     else:
-        with conn:
-            verificar_clave_cifrado(conn)
+        try:
+            conn = psycopg.connect(url)
+        except psycopg.OperationalError:
+            # Base no disponible (por ejemplo, en el DAST).
+            logger.warning("key_check_skipped_db_unreachable")
+        else:
+            with conn:
+                verificar_clave_cifrado(conn)
     yield
-
 
 app = FastAPI(
     title="MediTriage API",
