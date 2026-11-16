@@ -4,6 +4,8 @@ from uuid import UUID
 import psycopg
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from app.core.auth import requiere_rol
+from app.core.security import Usuario
 from app.db import get_conn
 from app.core.realtime import EVENTO_EVALUACION_CONFIRMADA, publicar_evento
 from app.core.sanitizer import sanitize_symptoms_text
@@ -19,7 +21,19 @@ router = APIRouter(prefix="/triage")
 ESTADO_INICIAL = "en_espera"
 
 _EXISTE_PACIENTE = "SELECT 1 FROM paciente WHERE paciente_id = %(patient_id)s"
-_EXISTE_USUARIO = "SELECT 1 FROM usuario_staff WHERE usuario_id = %(usuario_id)s"
+_EXISTE_USUARIO = (
+    "SELECT 1 FROM usuario_staff WHERE usuario_id = %(usuario_id)s AND activo"
+)
+
+
+def _verificar_usuario(cur, usuario: Usuario) -> None:
+    """El id sale del token; si el usuario fue dado de baja, el token deja de servir."""
+    cur.execute(_EXISTE_USUARIO, {"usuario_id": usuario.usuario_id})
+    if not cur.fetchone():
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="El usuario de la sesión ya no está activo.",
+        )
 
 # La fecha la pone la base de datos (UTC), no el cliente.
 _INSERT_EPISODIO = """
@@ -62,73 +76,60 @@ _INSERT_SINTOMA = """
     summary="Registra el formulario clínico (signos vitales y síntomas) de un paciente",
 )
 def crear_formulario(
-    data: FormularioClinicoInput, conn: psycopg.Connection = Depends(get_conn)
+    data: FormularioClinicoInput,
+    usuario: Usuario = Depends(requiere_rol("enfermero")),
+    conn: psycopg.Connection = Depends(get_conn),
 ):
     episodio_id = uuid.uuid4()
     signos_vitales_id = uuid.uuid4()
     signos = data.signos_vitales.model_dump()
 
-    try:
-        # Episodio, signos vitales y síntomas se guardan juntos.
-        with conn.transaction():
-            with conn.cursor() as cur:
-                cur.execute(_EXISTE_PACIENTE, {"patient_id": data.patient_id})
-                if not cur.fetchone():
-                    raise HTTPException(
-                        status_code=status.HTTP_404_NOT_FOUND,
-                        detail=f"No existe un paciente registrado con id {data.patient_id}.",
-                    )
-
-                if data.usuario_id is not None:
-                    cur.execute(_EXISTE_USUARIO, {"usuario_id": data.usuario_id})
-                    if not cur.fetchone():
-                        raise HTTPException(
-                            status_code=status.HTTP_404_NOT_FOUND,
-                            detail=f"No existe un usuario con id {data.usuario_id}.",
-                        )
-
-                cur.execute(
-                    _INSERT_EPISODIO,
-                    {
-                        "episodio_id": episodio_id,
-                        "patient_id": data.patient_id,
-                        "usuario_id": data.usuario_id,
-                        "motivo": (
-                            sanitize_symptoms_text(data.motivo_consulta)
-                            if data.motivo_consulta
-                            else None
-                        ),
-                        "estado": ESTADO_INICIAL,
-                    },
-                )
-                fecha_ingreso = cur.fetchone()[0]
-
-                cur.execute(
-                    _INSERT_SIGNOS,
-                    {
-                        "signos_vitales_id": signos_vitales_id,
-                        "episodio_id": episodio_id,
-                        **signos,
-                    },
+    # Episodio, signos vitales y síntomas se guardan juntos.
+    with conn.transaction():
+        with conn.cursor() as cur:
+            cur.execute(_EXISTE_PACIENTE, {"patient_id": data.patient_id})
+            if not cur.fetchone():
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"No existe un paciente registrado con id {data.patient_id}.",
                 )
 
-                for sintoma in data.sintomas:
-                    cur.execute(
-                        _INSERT_SINTOMA,
-                        {
-                            "sintoma_id": uuid.uuid4(),
-                            "episodio_id": episodio_id,
-                            **sintoma.model_dump(),
-                        },
-                    )
+            _verificar_usuario(cur, usuario)
 
-    except psycopg.errors.NotNullViolation as e:
-        if e.diag.column_name == "usuario_id":
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Falta usuario_id: el episodio debe indicar quién lo registra.",
-            ) from None
-        raise
+            cur.execute(
+                _INSERT_EPISODIO,
+                {
+                    "episodio_id": episodio_id,
+                    "patient_id": data.patient_id,
+                    "usuario_id": usuario.usuario_id,
+                    "motivo": (
+                        sanitize_symptoms_text(data.motivo_consulta)
+                        if data.motivo_consulta
+                        else None
+                    ),
+                    "estado": ESTADO_INICIAL,
+                },
+            )
+            fecha_ingreso = cur.fetchone()[0]
+
+            cur.execute(
+                _INSERT_SIGNOS,
+                {
+                    "signos_vitales_id": signos_vitales_id,
+                    "episodio_id": episodio_id,
+                    **signos,
+                },
+            )
+
+            for sintoma in data.sintomas:
+                cur.execute(
+                    _INSERT_SINTOMA,
+                    {
+                        "sintoma_id": uuid.uuid4(),
+                        "episodio_id": episodio_id,
+                        **sintoma.model_dump(),
+                    },
+                )
 
     return FormularioClinicoResponse(
         episodio_id=episodio_id,
@@ -180,77 +181,63 @@ _INSERT_DECISION = """
 def registrar_decision(
     episodio_id: UUID,
     data: DecisionInput,
+    usuario: Usuario = Depends(requiere_rol("enfermero")),
     conn: psycopg.Connection = Depends(get_conn),
 ):
     decision_id = uuid.uuid4()
 
-    try:
-        with conn.transaction():
-            with conn.cursor() as cur:
-                cur.execute(_BLOQUEAR_EPISODIO, {"episodio_id": episodio_id})
-                if not cur.fetchone():
-                    raise HTTPException(
-                        status_code=status.HTTP_404_NOT_FOUND,
-                        detail=f"No existe un episodio de triage con id {episodio_id}.",
-                    )
-
-                if data.usuario_id is not None:
-                    cur.execute(_EXISTE_USUARIO, {"usuario_id": data.usuario_id})
-                    if not cur.fetchone():
-                        raise HTTPException(
-                            status_code=status.HTTP_404_NOT_FOUND,
-                            detail=f"No existe un usuario con id {data.usuario_id}.",
-                        )
-
-                cur.execute(_ULTIMA_SUGERENCIA_IA, {"episodio_id": episodio_id})
-                sugerencia = cur.fetchone()
-                if not sugerencia:
-                    raise HTTPException(
-                        status_code=status.HTTP_409_CONFLICT,
-                        detail="El episodio aún no tiene una sugerencia de la IA que confirmar o modificar.",
-                    )
-                nivel_sugerido = sugerencia[0]
-
-                cur.execute(_YA_TIENE_DECISION, {"episodio_id": episodio_id})
-                if cur.fetchone():
-                    raise HTTPException(
-                        status_code=status.HTTP_409_CONFLICT,
-                        detail="El episodio ya tiene una decisión registrada; no se puede reemplazar.",
-                    )
-
-                coincide = data.nivel_esi_final == nivel_sugerido
-                if not coincide and (
-                    data.justificacion is None
-                    or len(data.justificacion) < JUSTIFICACION_MIN_CARACTERES
-                ):
-                    raise HTTPException(
-                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                        detail=(
-                            f"Para cambiar el nivel ESI sugerido por la IA ({nivel_sugerido}) "
-                            f"debe explicar el motivo (mínimo {JUSTIFICACION_MIN_CARACTERES} caracteres)."
-                        ),
-                    )
-
-                cur.execute(
-                    _INSERT_DECISION,
-                    {
-                        "decision_id": decision_id,
-                        "episodio_id": episodio_id,
-                        "nivel_esi_final": data.nivel_esi_final,
-                        "usuario_id": data.usuario_id,
-                        "coincide_con_ia": coincide,
-                        "justificacion": data.justificacion,
-                    },
+    with conn.transaction():
+        with conn.cursor() as cur:
+            cur.execute(_BLOQUEAR_EPISODIO, {"episodio_id": episodio_id})
+            if not cur.fetchone():
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"No existe un episodio de triage con id {episodio_id}.",
                 )
-                fecha_decision = cur.fetchone()[0]
 
-    except psycopg.errors.NotNullViolation as e:
-        if e.diag.column_name == "usuario_id":
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Falta usuario_id: la decisión debe indicar quién la toma.",
-            ) from None
-        raise
+            _verificar_usuario(cur, usuario)
+
+            cur.execute(_ULTIMA_SUGERENCIA_IA, {"episodio_id": episodio_id})
+            sugerencia = cur.fetchone()
+            if not sugerencia:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="El episodio aún no tiene una sugerencia de la IA que confirmar o modificar.",
+                )
+            nivel_sugerido = sugerencia[0]
+
+            cur.execute(_YA_TIENE_DECISION, {"episodio_id": episodio_id})
+            if cur.fetchone():
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="El episodio ya tiene una decisión registrada; no se puede reemplazar.",
+                )
+
+            coincide = data.nivel_esi_final == nivel_sugerido
+            if not coincide and (
+                data.justificacion is None
+                or len(data.justificacion) < JUSTIFICACION_MIN_CARACTERES
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=(
+                        f"Para cambiar el nivel ESI sugerido por la IA ({nivel_sugerido}) "
+                        f"debe explicar el motivo (mínimo {JUSTIFICACION_MIN_CARACTERES} caracteres)."
+                    ),
+                )
+
+            cur.execute(
+                _INSERT_DECISION,
+                {
+                    "decision_id": decision_id,
+                    "episodio_id": episodio_id,
+                    "nivel_esi_final": data.nivel_esi_final,
+                    "usuario_id": usuario.usuario_id,
+                    "coincide_con_ia": coincide,
+                    "justificacion": data.justificacion,
+                },
+            )
+            fecha_decision = cur.fetchone()[0]
 
     # La decisión ya quedó guardada (la transacción terminó): recién ahora se avisa
     # al tablero. Si Redis falla, publicar_evento solo deja un aviso en el log.
@@ -259,7 +246,7 @@ def registrar_decision(
         {
             "decision_id": str(decision_id),
             "episodio_id": str(episodio_id),
-            "usuario_id": str(data.usuario_id) if data.usuario_id else None,
+            "usuario_id": str(usuario.usuario_id),
             "nivel_esi_definitivo": data.nivel_esi_final,
             "es_sobrescritura": not coincide,
             "fecha_hora_decision": fecha_decision.isoformat(),
@@ -274,6 +261,6 @@ def registrar_decision(
         coincide_con_ia=coincide,
         modificado_manualmente=not coincide,
         justificacion=data.justificacion,
-        usuario_id=data.usuario_id,
+        usuario_id=usuario.usuario_id,
         fecha_hora_decision=fecha_decision,
     )

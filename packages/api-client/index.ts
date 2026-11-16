@@ -22,6 +22,7 @@ export type RolUsuario = Schemas["RolUsuario"];
 export type HealthResponse = Schemas["HealthResponse"];
 export type LoginInput = Schemas["LoginInput"];
 export type LoginResponse = Schemas["LoginResponse"];
+export type SesionResponse = Schemas["SesionResponse"];
 
 // --- Pacientes ---
 export type PatientInput = Schemas["PatientInput"];
