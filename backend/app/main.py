@@ -1,8 +1,10 @@
+from contextlib import asynccontextmanager
 import logging
 import os
 import time
 import uuid
 
+import psycopg
 import uvicorn
 from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -11,16 +13,37 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.v1.endpoints import auth, health, patients, triage, ws
 from app.core.auth import usuario_actual
+from app.core.canary import verificar_clave_cifrado
 from app.core.logging_config import configure_logging, request_id_var, ruta_sin_parametros
 
 # Factor 11: logs JSON a stdout con PII enmascarada (ver app/core/logging_config.py).
 configure_logging(os.environ.get("LOG_LEVEL", "INFO").upper())
 logger = logging.getLogger("meditriage.api")
 
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    # Si la clave no coincide con los datos cifrados, el backend no arranca.
+    url = os.environ.get("DATABASE_URL")
+    if not url:
+        # Sin base configurada no hay datos cifrados que comprobar (por ejemplo, el despliegue de práctica).
+        logger.warning("key_check_skipped_no_database_url")
+    else:
+        try:
+            conn = psycopg.connect(url)
+        except psycopg.OperationalError:
+            # Base no disponible (por ejemplo, en el DAST).
+            logger.warning("key_check_skipped_db_unreachable")
+        else:
+            with conn:
+                verificar_clave_cifrado(conn)
+    yield
+
 app = FastAPI(
     title="MediTriage API",
     version="0.1.0",
-    description="Backend base para MediTriage"
+    description="Backend base para MediTriage",
+    lifespan=lifespan,
 )
 
 # Públicos: /health y el login. Todo lo demás exige sesión válida (token en cookie o Bearer);
