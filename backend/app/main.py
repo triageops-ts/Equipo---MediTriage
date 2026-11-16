@@ -15,14 +15,27 @@ from app.api.v1.endpoints import auth, health, patients, triage, ws
 from app.core.auth import usuario_actual
 from app.core.canary import verificar_clave_cifrado
 from app.core.logging_config import configure_logging, request_id_var, ruta_sin_parametros
+from app.core.telemetry import (
+    configure_telemetry,
+    iniciar_span,
+    registrar_peticion,
+    ruta_plantilla,
+    start_metrics_server,
+)
 
 # Factor 11: logs JSON a stdout con PII enmascarada (ver app/core/logging_config.py).
 configure_logging(os.environ.get("LOG_LEVEL", "INFO").upper())
 logger = logging.getLogger("meditriage.api")
 
+# Observabilidad (OpenTelemetry): traces, métricas Prometheus en :9464 y trace_id en los logs.
+# Solo atributos sin datos personales: método, plantilla de ruta y código de estado.
+configure_telemetry()
+
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    # /metrics (Prometheus) en :9464, aparte del puerto de la API y sin pasar por el Ingress.
+    start_metrics_server()
     # Si la clave no coincide con los datos cifrados, el backend no arranca.
     url = os.environ.get("DATABASE_URL")
     if not url:
@@ -57,37 +70,48 @@ app.include_router(ws.router, prefix="/api/v1")
 
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
-    # El id lo genera el servidor (no se confía en un header del cliente).
+    # El id lo genera el servidor (no se confía en un header del cliente). Por la misma razón
+    # no se lee `traceparent`: cada petición abre su propio trace.
     token = request_id_var.set(uuid.uuid4().hex)
     inicio = time.perf_counter()
-    try:
-        response = await call_next(request)
-    except Exception as exc:
-        logger.error(
-            "request_failed",
-            extra={
-                "method": request.method,
-                "path": request.url.path,
-                "error_type": type(exc).__name__,
-                "duration_ms": round((time.perf_counter() - inicio) * 1000, 1),
-            },
-        )
-        raise
-    else:
-        # Los valores de parámetros de ruta (/patients/{id}) no se registran.
-        ruta = ruta_sin_parametros(request.url.path, request.scope.get("path_params", {}))
-        logger.info(
-            "request_completed",
-            extra={
-                "method": request.method,
-                "path": ruta,
-                "status": response.status_code,
-                "duration_ms": round((time.perf_counter() - inicio) * 1000, 1),
-            },
-        )
-        return response
-    finally:
-        request_id_var.reset(token)
+    # El span queda activo mientras dura la petición: los logs de abajo y los de los
+    # endpoints salen con su trace_id.
+    with iniciar_span(request.method) as span:
+        try:
+            response = await call_next(request)
+        except Exception as exc:
+            duracion = time.perf_counter() - inicio
+            registrar_peticion(span, request.method, ruta_plantilla(request.scope), 500, duracion)
+            span.record_exception(exc)
+            logger.error(
+                "request_failed",
+                extra={
+                    "method": request.method,
+                    "path": request.url.path,
+                    "error_type": type(exc).__name__,
+                    "duration_ms": round(duracion * 1000, 1),
+                },
+            )
+            raise
+        else:
+            # Los valores de parámetros de ruta (/patients/{id}) no se registran.
+            ruta = ruta_sin_parametros(request.url.path, request.scope.get("path_params", {}))
+            duracion = time.perf_counter() - inicio
+            registrar_peticion(
+                span, request.method, ruta_plantilla(request.scope), response.status_code, duracion
+            )
+            logger.info(
+                "request_completed",
+                extra={
+                    "method": request.method,
+                    "path": ruta,
+                    "status": response.status_code,
+                    "duration_ms": round(duracion * 1000, 1),
+                },
+            )
+            return response
+        finally:
+            request_id_var.reset(token)
 
 
 _PROBLEM_BASE = "https://api.meditriage.com/problems"
