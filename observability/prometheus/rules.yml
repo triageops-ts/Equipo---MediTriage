@@ -1,0 +1,161 @@
+# Recording rules de los SLIs de MediTriage (definidos en docs/slos.md).
+#
+# Convenciones:
+#  - Se aplica rate()/increase() ANTES de sum() (nunca sum() de un contador crudo).
+#  - Se excluyen las rutas /api/v1/health (probes de Kubernetes), /metrics y "unmatched"
+#    (URLs que no existen: escaneos y bots).
+#  - El bucket de latencia va explícito: le="3" (peticiones de 3 s o menos).
+#  - Si no hay tráfico, el denominador no devuelve serie y la regla no produce dato
+#    ("sin tráfico = sin datos"). No se usa `or vector(0)` a propósito.
+#  - Nombres: nivel:metrica:operaciones (convención de Prometheus).
+#
+# Validar:  promtool check rules observability/prometheus/rules.yml
+groups:
+  # ---------------------------------------------------------------------------------------
+  # Bloques base de 5 min: eventos válidos, buenos y malos por segundo.
+  # Los demás grupos se apoyan en estos.
+  # ---------------------------------------------------------------------------------------
+  - name: meditriage_sli_base
+    interval: 30s
+    rules:
+      # Disponibilidad: válidos = toda petición de la API; malos = 5xx.
+      - record: meditriage:http_requests_valid:rate5m
+        expr: |
+          sum(
+            rate(meditriage_http_requests_total{route!~"/api/v1/health|/metrics|unmatched"}[5m])
+          )
+
+      - record: meditriage:http_requests_bad:rate5m
+        expr: |
+          sum(
+            rate(meditriage_http_requests_total{route!~"/api/v1/health|/metrics|unmatched", status_code=~"5.."}[5m])
+          )
+
+      # Latencia: válidos = peticiones sin 5xx (los 5xx ya cuentan en disponibilidad);
+      # buenos = las que cayeron en el bucket le="3".
+      - record: meditriage:http_request_duration_valid:rate5m
+        expr: |
+          sum(
+            rate(meditriage_http_request_duration_seconds_count{route!~"/api/v1/health|/metrics|unmatched", status_code!~"5.."}[5m])
+          )
+
+      - record: meditriage:http_request_duration_good:rate5m
+        expr: |
+          sum(
+            rate(meditriage_http_request_duration_seconds_bucket{le="3", route!~"/api/v1/health|/metrics|unmatched", status_code!~"5.."}[5m])
+          )
+
+  # ---------------------------------------------------------------------------------------
+  # SLI de disponibilidad = buenos / válidos  (buenos = válidos sin 5xx).
+  # ---------------------------------------------------------------------------------------
+  - name: meditriage_sli_availability
+    interval: 30s
+    rules:
+      - record: meditriage:sli_availability:ratio_rate5m
+        expr: |
+          1 - (
+            sum(rate(meditriage_http_requests_total{route!~"/api/v1/health|/metrics|unmatched", status_code=~"5.."}[5m]))
+            /
+            sum(rate(meditriage_http_requests_total{route!~"/api/v1/health|/metrics|unmatched"}[5m]))
+          )
+
+  # ---------------------------------------------------------------------------------------
+  # SLI de latencia = peticiones con le="3" / total de peticiones (sin 5xx).
+  # ---------------------------------------------------------------------------------------
+  - name: meditriage_sli_latency
+    interval: 30s
+    rules:
+      - record: meditriage:sli_latency:ratio_rate5m
+        expr: |
+          sum(rate(meditriage_http_request_duration_seconds_bucket{le="3", route!~"/api/v1/health|/metrics|unmatched", status_code!~"5.."}[5m]))
+          /
+          sum(rate(meditriage_http_request_duration_seconds_count{route!~"/api/v1/health|/metrics|unmatched", status_code!~"5.."}[5m]))
+
+  # ---------------------------------------------------------------------------------------
+  # Ratios de error por ventana: 5 min, 30 min, 1 h y 6 h (base de las alertas de burn rate
+  # de la tarjeta 16 y de los paneles de la 17).
+  #   error disponibilidad = peticiones 5xx / peticiones válidas
+  #   error latencia       = 1 - (le="3" / total sin 5xx)
+  # ---------------------------------------------------------------------------------------
+  - name: meditriage_error_ratio_availability
+    interval: 30s
+    rules:
+      - record: meditriage:availability_error:ratio_rate5m
+        expr: |
+          sum(rate(meditriage_http_requests_total{route!~"/api/v1/health|/metrics|unmatched", status_code=~"5.."}[5m]))
+          /
+          sum(rate(meditriage_http_requests_total{route!~"/api/v1/health|/metrics|unmatched"}[5m]))
+
+      - record: meditriage:availability_error:ratio_rate30m
+        expr: |
+          sum(rate(meditriage_http_requests_total{route!~"/api/v1/health|/metrics|unmatched", status_code=~"5.."}[30m]))
+          /
+          sum(rate(meditriage_http_requests_total{route!~"/api/v1/health|/metrics|unmatched"}[30m]))
+
+      - record: meditriage:availability_error:ratio_rate1h
+        expr: |
+          sum(rate(meditriage_http_requests_total{route!~"/api/v1/health|/metrics|unmatched", status_code=~"5.."}[1h]))
+          /
+          sum(rate(meditriage_http_requests_total{route!~"/api/v1/health|/metrics|unmatched"}[1h]))
+
+      - record: meditriage:availability_error:ratio_rate6h
+        expr: |
+          sum(rate(meditriage_http_requests_total{route!~"/api/v1/health|/metrics|unmatched", status_code=~"5.."}[6h]))
+          /
+          sum(rate(meditriage_http_requests_total{route!~"/api/v1/health|/metrics|unmatched"}[6h]))
+
+  - name: meditriage_error_ratio_latency
+    interval: 30s
+    rules:
+      - record: meditriage:latency_error:ratio_rate5m
+        expr: |
+          1 - (
+            sum(rate(meditriage_http_request_duration_seconds_bucket{le="3", route!~"/api/v1/health|/metrics|unmatched", status_code!~"5.."}[5m]))
+            /
+            sum(rate(meditriage_http_request_duration_seconds_count{route!~"/api/v1/health|/metrics|unmatched", status_code!~"5.."}[5m]))
+          )
+
+      - record: meditriage:latency_error:ratio_rate30m
+        expr: |
+          1 - (
+            sum(rate(meditriage_http_request_duration_seconds_bucket{le="3", route!~"/api/v1/health|/metrics|unmatched", status_code!~"5.."}[30m]))
+            /
+            sum(rate(meditriage_http_request_duration_seconds_count{route!~"/api/v1/health|/metrics|unmatched", status_code!~"5.."}[30m]))
+          )
+
+      - record: meditriage:latency_error:ratio_rate1h
+        expr: |
+          1 - (
+            sum(rate(meditriage_http_request_duration_seconds_bucket{le="3", route!~"/api/v1/health|/metrics|unmatched", status_code!~"5.."}[1h]))
+            /
+            sum(rate(meditriage_http_request_duration_seconds_count{route!~"/api/v1/health|/metrics|unmatched", status_code!~"5.."}[1h]))
+          )
+
+      - record: meditriage:latency_error:ratio_rate6h
+        expr: |
+          1 - (
+            sum(rate(meditriage_http_request_duration_seconds_bucket{le="3", route!~"/api/v1/health|/metrics|unmatched", status_code!~"5.."}[6h]))
+            /
+            sum(rate(meditriage_http_request_duration_seconds_count{route!~"/api/v1/health|/metrics|unmatched", status_code!~"5.."}[6h]))
+          )
+
+  # ---------------------------------------------------------------------------------------
+  # SLI a 30 días (el que define docs/slos.md). Es la consulta más pesada: se evalúa cada 5 min.
+  # Requiere retención >= 35d en Prometheus (ver nota en docs/slos.md).
+  # ---------------------------------------------------------------------------------------
+  - name: meditriage_sli_30d
+    interval: 5m
+    rules:
+      - record: meditriage:sli_availability:ratio_30d
+        expr: |
+          1 - (
+            sum(increase(meditriage_http_requests_total{route!~"/api/v1/health|/metrics|unmatched", status_code=~"5.."}[30d]))
+            /
+            sum(increase(meditriage_http_requests_total{route!~"/api/v1/health|/metrics|unmatched"}[30d]))
+          )
+
+      - record: meditriage:sli_latency:ratio_30d
+        expr: |
+          sum(increase(meditriage_http_request_duration_seconds_bucket{le="3", route!~"/api/v1/health|/metrics|unmatched", status_code!~"5.."}[30d]))
+          /
+          sum(increase(meditriage_http_request_duration_seconds_count{route!~"/api/v1/health|/metrics|unmatched", status_code!~"5.."}[30d]))
