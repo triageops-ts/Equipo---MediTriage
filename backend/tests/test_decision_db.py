@@ -11,6 +11,7 @@ import psycopg
 import pytest
 from fastapi.testclient import TestClient
 
+from app.core.security import crear_token
 from app.main import app
 
 pytestmark = pytest.mark.skipif(
@@ -39,23 +40,30 @@ def _rut_unico() -> str:
     return formatear_rut(f"{cuerpo}-{calcular_dv(cuerpo)}")
 
 
-def _usuario_id():
-    """Un usuario real de usuario_staff, o None si la tabla está vacía."""
+def _cabecera_enfermero() -> dict:
+    """Token de un enfermero real de usuario_staff (lo crea la migración 0005)."""
     with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
-        fila = conn.execute("SELECT usuario_id FROM usuario_staff LIMIT 1").fetchone()
-    return str(fila[0]) if fila else None
+        fila = conn.execute(
+            "SELECT usuario_id FROM usuario_staff WHERE rol = 'enfermero' AND activo LIMIT 1"
+        ).fetchone()
+    if not fila:
+        pytest.skip("no hay un enfermero en usuario_staff (aplicar la migración 0005)")
+    return {"Authorization": f"Bearer {crear_token(fila[0], 'enfermero')[0]}"}
+
+
+def _post(url: str, **kw):
+    kw.setdefault("headers", _cabecera_enfermero())
+    return client.post(url, **kw)
 
 
 def _episodio(sugerido: int | None = 3) -> str:
     """Crea paciente + episodio por la API; inserta la sugerencia de la IA si se pide."""
-    p = client.post(
+    p = _post(
         "/api/v1/patients", json={"rut": _rut_unico(), "name": "Ana Soto", "has_consent": True}
     )
     assert p.status_code == 201
     body = {"patient_id": p.json()["patient_id"], "signos_vitales": SIGNOS}
-    if (uid := _usuario_id()) is not None:
-        body["usuario_id"] = uid
-    f = client.post("/api/v1/triage/formulario", json=body)
+    f = _post("/api/v1/triage/formulario", json=body)
     assert f.status_code == 201, f.text
     episodio_id = f.json()["episodio_id"]
 
@@ -76,9 +84,7 @@ def _episodio(sugerido: int | None = 3) -> str:
 
 
 def _decidir(episodio_id: str, **datos):
-    if (uid := _usuario_id()) is not None:
-        datos.setdefault("usuario_id", uid)
-    return client.post(f"/api/v1/triage/{episodio_id}/decision", json=datos)
+    return _post(f"/api/v1/triage/{episodio_id}/decision", json=datos)
 
 
 def _fila_decision(episodio_id: str):
@@ -151,5 +157,5 @@ def test_nivel_fuera_de_rango_422():
 
 
 def test_id_de_episodio_invalido_422():
-    r = client.post("/api/v1/triage/no-es-un-uuid/decision", json={"nivel_esi_final": 3})
+    r = _post("/api/v1/triage/no-es-un-uuid/decision", json={"nivel_esi_final": 3})
     assert r.status_code == 422

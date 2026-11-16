@@ -104,8 +104,6 @@ class FormularioClinicoInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     patient_id: UUID = Field(description="Paciente ya registrado (POST /patients).")
-    # Temporal hasta que exista el login: quién registra el formulario.
-    usuario_id: Optional[UUID] = None
     motivo_consulta: Optional[str] = Field(default=None, max_length=1000)
     signos_vitales: SignosVitalesInput
     sintomas: list[SintomaInput] = Field(default_factory=list)

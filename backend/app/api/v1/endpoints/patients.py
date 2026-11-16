@@ -4,6 +4,7 @@ import uuid
 import psycopg
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
+from app.core.auth import requiere_rol
 from app.core.consent import CONSENT_TIPO
 from app.core.rut import RutInvalido, formatear_rut, normalizar_rut
 from app.core.rut_hash import calcular_rut_hash
@@ -61,7 +62,11 @@ _INSERT_CONSENTIMIENTO = """
     tags=["Pacientes"],
     summary="Registra un nuevo paciente",
 )
-def create_patient(data: PatientInput, conn: psycopg.Connection = Depends(get_conn)):
+def create_patient(
+    data: PatientInput,
+    _usuario=Depends(requiere_rol("enfermero")),
+    conn: psycopg.Connection = Depends(get_conn),
+):
     key = encryption_key()
     rut_formateado = formatear_rut(data.rut)
     rut_hash = calcular_rut_hash(rut_formateado)
@@ -154,6 +159,7 @@ _BUSCAR_POR_RUT = """
 )
 def list_patients(
     rut: str = Query(..., description="RUT del paciente, con o sin puntos y guion."),
+    _usuario=Depends(requiere_rol("enfermero", "medico")),
     conn: psycopg.Connection = Depends(get_conn),
 ):
     try:

@@ -11,3 +11,10 @@ paths = ['''backend/localhost\+1.*\.pem''']
 [[allowlists]]
 description = "Token de ejemplo del catálogo de eventos (docs/data/event-catalog.md). Es un valor ficticio de documentación, no una credencial."
 regexes = ['''tok_sec_abc123''']
+
+[[allowlists]]
+description = "Valor de prueba de JWT_SECRET en backend/tests/conftest.py. Solo permite que los tests firmen tokens; no se usa en ningún ambiente real (la app lee JWT_SECRET del entorno)."
+condition = "AND"
+paths = ['''backend/tests/conftest\.py''']
+regexTarget = "line"
+regexes = ['''JWT_SECRET''']

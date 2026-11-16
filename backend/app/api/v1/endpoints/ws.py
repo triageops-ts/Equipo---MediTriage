@@ -12,8 +12,10 @@ Mensajes que recibe el cliente:
 
 Lo que el cliente envíe se ignora: el canal es solo de salida.
 
-Pendiente: todavía no hay login, así que el canal no autentica. Al existir, hay que
-validar el token y el origen de la conexión antes de aceptarla.
+Autenticación: antes de aceptar la conexión se valida el token (cookie httpOnly, que el
+navegador envía solo en el mismo origen, o header Authorization). Sin token válido, o con un
+rol que no sea médico, se cierra con 1008 (política violada).
+Pendiente: validar también el header Origin.
 """
 import contextlib
 import logging
@@ -21,8 +23,9 @@ import logging
 import anyio
 import redis
 import redis.asyncio as aioredis
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 
+from app.core.auth import autenticar
 from app.core.realtime import CANAL_TRIAGE, redis_url
 
 router = APIRouter()
@@ -30,6 +33,9 @@ logger = logging.getLogger("meditriage.ws")
 
 # 1011 = error interno del servidor (el canal no está disponible).
 CODIGO_CANAL_NO_DISPONIBLE = 1011
+# 1008 = política violada (sin sesión válida o rol sin permiso).
+CODIGO_NO_AUTORIZADO = 1008
+ROLES_TABLERO = ("medico",)
 
 
 async def _reenviar_eventos(websocket: WebSocket, pubsub, alcance: anyio.CancelScope) -> None:
@@ -60,6 +66,14 @@ async def _esperar_desconexion(websocket: WebSocket, alcance: anyio.CancelScope)
 
 @router.websocket("/ws/tablero")
 async def tablero(websocket: WebSocket):
+    try:
+        usuario = autenticar(websocket)
+        if usuario.rol not in ROLES_TABLERO:
+            raise HTTPException(403)
+    except HTTPException:
+        await websocket.close(code=CODIGO_NO_AUTORIZADO)
+        return
+
     await websocket.accept()
 
     cliente = None
