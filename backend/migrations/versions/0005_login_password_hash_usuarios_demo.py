@@ -39,7 +39,8 @@ def upgrade() -> None:
     clave = os.environ.get("APP_ENCRYPTION_KEY")
     if not clave:
         raise RuntimeError("Falta la variable de entorno APP_ENCRYPTION_KEY.")
-    password = os.environ.get("DEMO_PASSWORD", PASSWORD_DEMO_POR_DEFECTO)
+    # Contraseña de demostración pública (usuarios con datos sintéticos). No es una credencial real.
+    password = os.environ.get("DEMO_PASSWORD", PASSWORD_DEMO_POR_DEFECTO)  # nosemgrep: semgrep.meditriage-secreto-en-codigo
     password_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("ascii")
 
     op.execute("CREATE EXTENSION IF NOT EXISTS pgcrypto")
