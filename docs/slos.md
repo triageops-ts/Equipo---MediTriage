@@ -1,6 +1,6 @@
 # SLIs, SLOs y error budget — MediTriage Backend
 
-Este documento define cómo medimos que el backend de MediTriage funciona bien y qué hacemos cuando deja de hacerlo. Las métricas salen de la instrumentación OpenTelemetry de la tarjeta 13 (`backend/app/core/telemetry.py`) y se consultan en Prometheus (kube-prometheus-stack).
+Este documento define cómo medimos que el backend de MediTriage funciona bien y qué hacemos cuando deja de hacerlo. Las métricas salen de la instrumentación OpenTelemetry (`backend/app/core/telemetry.py`) y se consultan en Prometheus (kube-prometheus-stack).
 
 ## 1. Contexto del servicio
 
