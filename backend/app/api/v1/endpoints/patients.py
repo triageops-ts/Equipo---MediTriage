@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.core.consent import CONSENT_TIPO
 from app.core.rut import RutInvalido, formatear_rut, normalizar_rut
+from app.core.rut_hash import calcular_rut_hash
 from app.db import encryption_key, get_conn
 from app.schemas.patient import Patient, PatientFound, PatientInput
 
@@ -16,18 +17,15 @@ _SEXO_A_DB = {"male": "masculino", "female": "femenino"}
 
 _LOCK_RUT = "SELECT pg_advisory_xact_lock(hashtextextended(%(rut)s::text, 0))"
 
-_EXISTE_RUT = """
-    SELECT 1 FROM paciente
-    WHERE pgp_sym_decrypt(rut, %(key)s::text) = %(rut)s::text
-    LIMIT 1
-"""
+_EXISTE_RUT = "SELECT 1 FROM paciente WHERE rut_hash = %(rut_hash)s LIMIT 1"
 
 _INSERT_PACIENTE = """
-    INSERT INTO paciente (paciente_id, nombre_completo, rut, fecha_nacimiento, sexo_biologico)
+    INSERT INTO paciente (paciente_id, nombre_completo, rut, rut_hash, fecha_nacimiento, sexo_biologico)
     VALUES (
         %(paciente_id)s,
         %(nombre)s,
         pgp_sym_encrypt(%(rut)s::text, %(key)s::text, 'cipher-algo=aes256'),
+        %(rut_hash)s,
         %(fecha_nacimiento)s,
         %(sexo)s
     )
@@ -66,13 +64,14 @@ _INSERT_CONSENTIMIENTO = """
 def create_patient(data: PatientInput, conn: psycopg.Connection = Depends(get_conn)):
     key = encryption_key()
     rut_formateado = formatear_rut(data.rut)
+    rut_hash = calcular_rut_hash(rut_formateado)
     paciente_id = uuid.uuid4()
     consentimiento_id = uuid.uuid4()
 
     with conn.transaction():
         with conn.cursor() as cur:
             cur.execute(_LOCK_RUT, {"rut": rut_formateado})
-            cur.execute(_EXISTE_RUT, {"rut": rut_formateado, "key": key})
+            cur.execute(_EXISTE_RUT, {"rut_hash": rut_hash})
             if cur.fetchone():
                 logger.warning("patient_create_conflict")  # sin RUT
                 raise HTTPException(
@@ -86,6 +85,7 @@ def create_patient(data: PatientInput, conn: psycopg.Connection = Depends(get_co
                     "paciente_id": paciente_id,
                     "nombre": data.name,
                     "rut": rut_formateado,
+                    "rut_hash": rut_hash,
                     "key": key,
                     "fecha_nacimiento": data.birth_date,
                     "sexo": _SEXO_A_DB.get(data.biological_sex),
@@ -141,7 +141,7 @@ _SEXO_A_API = {"masculino": "male", "femenino": "female"}
 _BUSCAR_POR_RUT = """
     SELECT paciente_id, nombre_completo, fecha_nacimiento, sexo_biologico
     FROM paciente
-    WHERE pgp_sym_decrypt(rut, %(key)s::text) = %(rut)s::text
+    WHERE rut_hash = %(rut_hash)s
     LIMIT 1
 """
 
@@ -164,7 +164,7 @@ def list_patients(
         ) from None
 
     with conn.cursor() as cur:
-        cur.execute(_BUSCAR_POR_RUT, {"rut": rut_formateado, "key": encryption_key()})
+        cur.execute(_BUSCAR_POR_RUT, {"rut_hash": calcular_rut_hash(rut_formateado)})
         filas = cur.fetchall()
 
     return [
