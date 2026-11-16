@@ -1,0 +1,47 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  # Linting (S05-5): ruff lee backend/ruff.toml. Si encuentra errores, este job falla y el PR
+  # queda en rojo. Corre en paralelo con los tests. ruff va fijado y fuera de requirements.txt
+  # para que no entre en la imagen Docker de producción.
+  lint:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./backend
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Instalar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Instalar ruff
+        run: pip install ruff==0.16.8
+      - name: Ejecutar ruff
+        run: ruff check .
+
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./backend
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Instalar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Instalar dependencias
+        run: |
+          pip install -r requirements.txt
+      - name: Ejecutar pruebas
+        run: |
+          pytest tests/ -v --cov=app --cov-fail-under=80
