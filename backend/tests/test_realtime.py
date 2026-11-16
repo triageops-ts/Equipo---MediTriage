@@ -17,10 +17,14 @@ from fastapi.testclient import TestClient
 
 from app.api.v1.endpoints import triage as triage_endpoint
 from app.core import realtime
+from app.core.security import crear_token
 from app.db import get_conn
 from app.main import app
 
-client = TestClient(app)
+# Los endpoints exigen sesión: token de enfermero firmado en la prueba.
+client = TestClient(
+    app, headers={"Authorization": f"Bearer {crear_token(uuid.uuid4(), 'enfermero')[0]}"}
+)
 
 FECHA_DECISION = datetime(2026, 11, 13, 20, 0, 0)
 
@@ -101,6 +105,8 @@ class _CursorFalso:
         self.sql = sql
 
     def fetchone(self):
+        if "usuario_staff" in self.sql:
+            return (1,)  # el usuario del token existe y está activo
         if "FOR UPDATE" in self.sql:
             return (1,)
         if "clasificacion_ia" in self.sql:

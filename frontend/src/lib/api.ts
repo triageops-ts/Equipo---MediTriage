@@ -8,6 +8,8 @@
 export const RUTAS = {
   health: "/api/v1/health",
   login: "/api/v1/auth/login",
+  sesion: "/api/v1/auth/me",
+  logout: "/api/v1/auth/logout",
   pacientes: "/api/v1/patients",
   formulario: "/api/v1/triage/formulario",
   evaluar: (episodioId: string) => `/api/v1/triage/${episodioId}/evaluate`,
@@ -70,7 +72,6 @@ export interface SintomaClinico {
 
 export interface FormularioClinico {
   patient_id: string;
-  usuario_id?: string;
   motivo_consulta?: string;
   signos_vitales: SignosVitales;
   sintomas?: SintomaClinico[];
@@ -101,7 +102,6 @@ export interface DecisionInput {
   nivel_esi_final: EsiLevel;
   /** Obligatoria (mínimo 10 caracteres) si el nivel final difiere del sugerido por la IA. */
   justificacion?: string;
-  usuario_id?: string;
 }
 
 export interface DecisionResponse {
@@ -191,6 +191,11 @@ export interface LoginResponse {
   rol: RolUsuario;
 }
 
+export interface SesionResponse {
+  usuario_id: string;
+  rol: RolUsuario;
+}
+
 export interface ErrorCampo {
   field: string;
   message: string;
@@ -208,27 +213,35 @@ export class ApiError extends Error {
   }
 }
 
-// Token JWT de la sesión (lo entrega POST /auth/login). Si hay uno, se envía como Bearer.
-let tokenActual: string | null = null;
-
-export function establecerToken(token: string | null): void {
-  tokenActual = token;
-}
+// La sesión vive en una cookie httpOnly (access_token) que pone el backend en el login: este
+// código no ve ni guarda el token. Como se llama a /api/v1 por el rewrite de Next (mismo
+// origen), el navegador envía la cookie solo.
 
 async function pedir<T>(url: string, init?: RequestInit): Promise<T> {
   let res: Response;
   try {
     res = await fetch(url, {
       cache: "no-store", // las respuestas llevan RUT y nombre: no deben quedar en la caché HTTP
+      credentials: "same-origin",
       ...init,
       headers: {
         "Content-Type": "application/json",
-        ...(tokenActual ? { Authorization: `Bearer ${tokenActual}` } : {}),
         ...init?.headers,
       },
     });
   } catch {
     throw new ApiError(0, "No se pudo conectar con el servidor.");
+  }
+
+  // Sesión vencida o ausente: de vuelta al login (el login y /auth/me manejan su propio 401).
+  if (
+    res.status === 401 &&
+    url !== RUTAS.login &&
+    url !== RUTAS.sesion &&
+    typeof window !== "undefined"
+  ) {
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- recarga completa a propósito: la sesión venció
+    window.location.href = "/login";
   }
 
   if (!res.ok) {
@@ -243,6 +256,7 @@ async function pedir<T>(url: string, init?: RequestInit): Promise<T> {
     }
     throw new ApiError(res.status, detalle, errores);
   }
+  if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
 }
 
@@ -262,9 +276,24 @@ export function obtenerEstadoServicio(): Promise<EstadoServicio> {
   return pedir(RUTAS.health);
 }
 
-/** POST /auth/login */
-export function iniciarSesion(datos: LoginInput): Promise<LoginResponse> {
+/**
+ * POST /auth/login. El cuerpo trae también el token (contrato), pero aquí no se usa ni se
+ * guarda: la sesión queda en la cookie httpOnly. Solo se devuelven el rol y el id.
+ */
+export function iniciarSesion(
+  datos: LoginInput,
+): Promise<Pick<LoginResponse, "usuario_id" | "rol" | "expires_in">> {
   return pedir(RUTAS.login, { method: "POST", body: JSON.stringify(datos) });
+}
+
+/** GET /auth/me: usuario y rol de la sesión (el frontend no puede leer la cookie). */
+export function obtenerSesion(): Promise<SesionResponse> {
+  return pedir(RUTAS.sesion);
+}
+
+/** POST /auth/logout: el backend borra la cookie. */
+export function cerrarSesion(): Promise<void> {
+  return pedir(RUTAS.logout, { method: "POST" });
 }
 
 /** GET /patients. Devuelve [] si no hay un paciente con ese RUT. */

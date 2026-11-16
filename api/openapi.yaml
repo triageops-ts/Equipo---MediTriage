@@ -55,14 +55,49 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
+  /auth/me:
+    get:
+      tags:
+        - Autenticación
+      summary: Usuario de la sesión actual
+      description: Devuelve el id y el rol del token. Lo usa el frontend, que no puede leer la cookie httpOnly, para saber qué vistas puede abrir.
+      operationId: sesionActual
+      x-estado: implementado
+      responses:
+        '200':
+          description: Sesión válida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SesionResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /auth/logout:
+    post:
+      tags:
+        - Autenticación
+      summary: Cierra la sesión
+      description: Borra la cookie `access_token`. No requiere token.
+      operationId: logout
+      x-estado: implementado
+      security: []
+      responses:
+        '204':
+          description: Sesión cerrada
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
   /auth/login:
     post:
       tags:
         - Autenticación
       summary: Inicia sesión
-      description: Valida las credenciales del personal de salud y entrega un token JWT para usar como `Bearer` en el resto de los endpoints. No requiere token.
+      description: Valida las credenciales del personal de salud y entrega un token JWT con el rol y el id del usuario. El token viaja en el cuerpo y también en una cookie `access_token` (httpOnly, SameSite=Strict); el resto de los endpoints aceptan la cookie o el header `Authorization Bearer`. No requiere token.
       operationId: login
-      x-estado: pendiente
+      x-estado: implementado
       security: []
       requestBody:
         required: true
@@ -112,6 +147,8 @@ paths:
                 $ref: '#/components/schemas/Patient'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '409':
           $ref: '#/components/responses/Conflict'
         '422':
@@ -145,6 +182,8 @@ paths:
                   $ref: '#/components/schemas/PatientFound'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '422':
           $ref: '#/components/responses/ValidationError'
         '500':
@@ -178,6 +217,8 @@ paths:
                 $ref: '#/components/schemas/FormularioClinicoResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
         '422':
@@ -241,6 +282,8 @@ paths:
                 $ref: '#/components/schemas/DecisionResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
@@ -435,6 +478,16 @@ components:
           type: integer
           description: Segundos que dura el token.
           example: 3600
+        usuario_id:
+          type: string
+          format: uuid
+        rol:
+          $ref: '#/components/schemas/RolUsuario'
+
+    SesionResponse:
+      type: object
+      required: [usuario_id, rol]
+      properties:
         usuario_id:
           type: string
           format: uuid
@@ -649,10 +702,6 @@ components:
           type: string
           format: uuid
           description: Paciente ya registrado (POST /patients).
-        usuario_id:
-          type: string
-          format: uuid
-          description: Temporal hasta que exista el login. Quién registra el formulario; con login se toma del token.
         motivo_consulta:
           type: string
           maxLength: 1000
@@ -734,10 +783,6 @@ components:
           maxLength: 1000
           description: Opcional si confirma el nivel de la IA. Obligatoria (mínimo 10 caracteres) si lo cambia.
           example: "Dificultad respiratoria severa no captada en el triage inicial."
-        usuario_id:
-          type: string
-          format: uuid
-          description: Temporal hasta que exista el login. Quién toma la decisión; con login se toma del token.
 
     DecisionResponse:
       type: object

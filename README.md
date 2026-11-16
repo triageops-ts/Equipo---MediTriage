@@ -142,6 +142,21 @@ uvicorn app.main:app --reload --ssl-keyfile="localhost+1-key.pem" --ssl-certfile
 ```
 ✅ **Verificación:** Ingresa a `https://127.0.0.1:8000/docs`. Deberás ver el candado cerrado en el navegador, confirmando que tu entorno seguro está activo.
 
+## 🔐 Login y roles (S09-1)
+
+- **Variables nuevas** (en `.env`, que no se sube al repo): `JWT_SECRET` (obligatoria, clave larga y
+  aleatoria, p. ej. `openssl rand -hex 32`), `JWT_EXPIRE_MINUTES` (por defecto 60) y `COOKIE_SECURE`
+  (`true` en producción con HTTPS; `false` en `http://localhost`).
+- **Migración:** `alembic upgrade head` (necesita `DATABASE_URL` y `APP_ENCRYPTION_KEY`) agrega
+  `usuario_staff.password_hash` y crea 3 usuarios de **demostración**, todos con la contraseña
+  `Demo-2026!` (se puede cambiar con `DEMO_PASSWORD` antes de migrar):
+  `enfermero@meditriage.test`, `medico@meditriage.test`, `auditor@meditriage.test`.
+  No usarlos en producción.
+- **API:** `POST /api/v1/auth/login` (token en el cuerpo y en la cookie httpOnly `access_token`),
+  `GET /api/v1/auth/me`, `POST /api/v1/auth/logout`. Todos los endpoints, salvo `/health` y el login,
+  exigen la cookie o `Authorization: Bearer <token>`. `usuario_id` sale del token.
+- **Frontend:** pantalla `/login`; `/nurse`, `/doctor` y `/auditor` solo abren con su rol.
+
 ## 🔒 Prohibición de Mocks Locales (Dev/prod parity)
 
 Para mantener la consistencia entre los entornos de desarrollo y producción, es obligatorio utilizar los servicios reales definidos en `docker-compose.yml` durante el desarrollo integrado de MediTriage.

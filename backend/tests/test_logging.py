@@ -11,8 +11,12 @@ from fastapi.testclient import TestClient
 
 from app.core.logging_config import MASCARA, JsonFormatter, mascarar_texto, ruta_sin_parametros
 from app.core.rut import calcular_dv
+from app.core.security import crear_token
 from app.db import get_conn
 from app.main import app
+
+# Los endpoints exigen sesión: token de enfermero firmado en la prueba.
+_AUTH = {"Authorization": f"Bearer {crear_token(uuid.uuid4(), 'enfermero')[0]}"}
 
 NOMBRE = "Ana Soto Pérez"
 EMAIL = "ana.soto@example.com"
@@ -170,7 +174,7 @@ def _sin_pii(buffer):
 
 def test_201_registra_evento_sin_pii_y_con_id_intacto(salida_logs):
     app.dependency_overrides[get_conn] = lambda: _Conn(existe=False)
-    r = TestClient(app).post("/api/v1/patients", json=_datos())
+    r = TestClient(app, headers=_AUTH).post("/api/v1/patients", json=_datos())
     assert r.status_code == 201
 
     eventos = _eventos(salida_logs)
@@ -185,7 +189,7 @@ def test_201_registra_evento_sin_pii_y_con_id_intacto(salida_logs):
 
 def test_409_no_loguea_el_rut_pero_la_respuesta_no_cambia(salida_logs):
     app.dependency_overrides[get_conn] = lambda: _Conn(existe=True)
-    r = TestClient(app).post("/api/v1/patients", json=_datos())
+    r = TestClient(app, headers=_AUTH).post("/api/v1/patients", json=_datos())
     assert r.status_code == 409
     assert RUT in r.json()["detail"]  # contrato de la API intacto
 
@@ -196,7 +200,7 @@ def test_409_no_loguea_el_rut_pero_la_respuesta_no_cambia(salida_logs):
 
 def test_422_loguea_solo_nombres_de_campo(salida_logs):
     app.dependency_overrides[get_conn] = lambda: _Conn()  # FastAPI resuelve la conexión antes de validar
-    r = TestClient(app).post("/api/v1/patients", json=_datos(rut="11.111.111-2"))
+    r = TestClient(app, headers=_AUTH).post("/api/v1/patients", json=_datos(rut="11.111.111-2"))
     assert r.status_code == 422
     assert "dígito verificador" in r.json()["errors"][0]["message"]  # respuesta intacta
 
@@ -212,7 +216,7 @@ def test_error_no_controlado_registra_tipo_sin_mensaje(salida_logs):
         raise RuntimeError(f"fallo con {RUT} {EMAIL}")
 
     app.dependency_overrides[get_conn] = _explota
-    r = TestClient(app, raise_server_exceptions=False).post("/api/v1/patients", json=_datos())
+    r = TestClient(app, raise_server_exceptions=False, headers=_AUTH).post("/api/v1/patients", json=_datos())
     assert r.status_code == 500
 
     fallo = next(e for e in _eventos(salida_logs) if e["message"] == "request_failed")
@@ -257,7 +261,6 @@ def test_triage_sanitiza_datos_personales_del_motivo(salida_logs):
 
     datos = {
         "patient_id": str(uuid.uuid4()),
-        "usuario_id": str(uuid.uuid4()),
         "motivo_consulta": motivo,
         "signos_vitales": {
             "presion_sistolica": 120,
@@ -271,7 +274,7 @@ def test_triage_sanitiza_datos_personales_del_motivo(salida_logs):
         },
     }
 
-    r = TestClient(app).post("/api/v1/triage/formulario", json=datos)
+    r = TestClient(app, headers=_AUTH).post("/api/v1/triage/formulario", json=datos)
 
     assert r.status_code == 201
     assert conexion.cursor_t.motivo_guardado is not None

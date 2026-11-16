@@ -29,7 +29,12 @@ def _errores(**signos):
 def test_formulario_valido():
     f = FormularioClinicoInput(**_form())
     assert f.signos_vitales.saturacion_oxigeno == 98
-    assert f.usuario_id is None
+    assert not hasattr(f, "usuario_id")  # sale del token, no del cuerpo
+
+
+def test_usuario_id_en_el_cuerpo_se_rechaza():
+    with pytest.raises(ValidationError):
+        FormularioClinicoInput(**_form(), usuario_id="3f8a6c1e-5b7d-4e2a-9c41-2d8f0a7b6e13")
 
 
 def test_spo2_150_se_rechaza():

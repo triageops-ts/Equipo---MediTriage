@@ -4,12 +4,13 @@ import time
 import uuid
 
 import uvicorn
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.api.v1.endpoints import health, patients, triage, ws
+from app.api.v1.endpoints import auth, health, patients, triage, ws
+from app.core.auth import usuario_actual
 from app.core.logging_config import configure_logging, request_id_var, ruta_sin_parametros
 
 # Factor 11: logs JSON a stdout con PII enmascarada (ver app/core/logging_config.py).
@@ -22,12 +23,13 @@ app = FastAPI(
     description="Backend base para MediTriage"
 )
 
+# Públicos: /health y el login. Todo lo demás exige sesión válida (token en cookie o Bearer);
+# además cada endpoint indica qué roles puede usarlo (app/core/auth.py: requiere_rol).
 app.include_router(health.router, prefix="/api/v1")
-app.include_router(patients.router, prefix="/api/v1")
-app.include_router(triage.router, prefix="/api/v1")
-app.include_router(health.router, prefix="/api/v1")
-app.include_router(patients.router, prefix="/api/v1")
-app.include_router(triage.router, prefix="/api/v1")
+app.include_router(auth.router, prefix="/api/v1")
+app.include_router(patients.router, prefix="/api/v1", dependencies=[Depends(usuario_actual)])
+app.include_router(triage.router, prefix="/api/v1", dependencies=[Depends(usuario_actual)])
+# El WebSocket valida el token él mismo (un 401 HTTP no aplica a un canal ya abierto).
 app.include_router(ws.router, prefix="/api/v1")
 
 @app.middleware("http")
