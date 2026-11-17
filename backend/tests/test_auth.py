@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
 from app.core.security import COOKIE_NOMBRE, crear_token, hash_password, leer_token
-from app.db import get_conn
+from app.db import get_conn, get_conn_login
 from app.main import app
 
 PASSWORD = "Demo-2026!"
@@ -53,6 +53,7 @@ def client(monkeypatch):
     monkeypatch.setenv("APP_ENCRYPTION_KEY", "clave-de-cifrado-de-pruebas")
     usuarios = {EMAIL: (USUARIO_ID, "enfermero", hash_password(PASSWORD))}
     app.dependency_overrides[get_conn] = lambda: _Conexion(usuarios)
+    app.dependency_overrides[get_conn_login] = lambda: _Conexion(usuarios)
     yield TestClient(app)
     app.dependency_overrides.clear()
 
@@ -102,7 +103,7 @@ def test_login_usuario_inexistente_401_con_el_mismo_mensaje(client):
 
 
 def test_login_usuario_sin_password_hash_401(client):
-    app.dependency_overrides[get_conn] = lambda: _Conexion(
+    app.dependency_overrides[get_conn_login] = lambda: _Conexion(
         {EMAIL: (USUARIO_ID, "enfermero", None)}
     )
     assert _login(client).status_code == 401

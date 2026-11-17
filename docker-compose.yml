@@ -12,6 +12,7 @@ services:
       - ./backend:/app
     environment:
       - DATABASE_URL=${DATABASE_URL}
+      - MIGRATION_DATABASE_URL=${MIGRATION_DATABASE_URL}
       - APP_ENCRYPTION_KEY=${APP_ENCRYPTION_KEY}
       - APP_RUT_HASH_KEY=${APP_RUT_HASH_KEY}
       - JWT_SECRET=${JWT_SECRET}

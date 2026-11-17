@@ -9,7 +9,7 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-database_url = os.environ.get("DATABASE_URL")
+database_url = os.environ.get("MIGRATION_DATABASE_URL") or os.environ.get("DATABASE_URL")
 
 if not database_url:
     raise RuntimeError("Falta la variable de entorno DATABASE_URL.")
