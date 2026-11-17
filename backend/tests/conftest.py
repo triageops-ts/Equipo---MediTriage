@@ -2,3 +2,4 @@ import os
 
 # Clave de firma solo para las pruebas.
 os.environ.setdefault("JWT_SECRET", "clave-de-pruebas-0123456789-0123456789-abcdef")
+os.environ.setdefault("APP_RUT_HASH_KEY", "clave-hash-rut-de-pruebas-0123456789")

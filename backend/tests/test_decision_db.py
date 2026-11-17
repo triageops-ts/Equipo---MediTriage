@@ -42,7 +42,7 @@ def _rut_unico() -> str:
 
 def _cabecera_enfermero() -> dict:
     """Token de un enfermero real de usuario_staff (lo crea la migración 0005)."""
-    with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
+    with psycopg.connect(os.environ.get("MIGRATION_DATABASE_URL") or os.environ["DATABASE_URL"]) as conn:
         fila = conn.execute(
             "SELECT usuario_id FROM usuario_staff WHERE rol = 'enfermero' AND activo LIMIT 1"
         ).fetchone()
@@ -68,7 +68,7 @@ def _episodio(sugerido: int | None = 3) -> str:
     episodio_id = f.json()["episodio_id"]
 
     if sugerido is not None:
-        with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
+        with psycopg.connect(os.environ.get("MIGRATION_DATABASE_URL") or os.environ["DATABASE_URL"]) as conn:
             conn.execute(
                 """
                 INSERT INTO clasificacion_ia
@@ -88,7 +88,7 @@ def _decidir(episodio_id: str, **datos):
 
 
 def _fila_decision(episodio_id: str):
-    with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
+    with psycopg.connect(os.environ.get("MIGRATION_DATABASE_URL") or os.environ["DATABASE_URL"]) as conn:
         return conn.execute(
             "SELECT nivel_esi_final, coincide_con_ia, justificacion "
             "FROM decision_clinica WHERE episodio_id = %s",

@@ -13,7 +13,7 @@ from app.core.security import (
     crear_token,
     verificar_password,
 )
-from app.db import encryption_key, get_conn
+from app.db import encryption_key, get_conn_login
 from app.schemas.auth import LoginInput, LoginResponse, SesionResponse
 
 router = APIRouter(prefix="/auth", tags=["Autenticación"])
@@ -37,7 +37,7 @@ _CREDENCIALES_INVALIDAS = "Correo o contraseña incorrectos."
     response_model=LoginResponse,
     summary="Inicia sesión",
 )
-def login(data: LoginInput, response: Response, conn: psycopg.Connection = Depends(get_conn)):
+def login(data: LoginInput, response: Response, conn: psycopg.Connection = Depends(get_conn_login)):
     with conn.cursor() as cur:
         cur.execute(_BUSCAR_USUARIO, {"key": encryption_key(), "email": data.email})
         fila = cur.fetchone()
