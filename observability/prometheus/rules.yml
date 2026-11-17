@@ -54,7 +54,7 @@ groups:
       - record: meditriage:sli_availability:ratio_rate5m
         expr: |
           1 - (
-            sum(rate(meditriage_http_requests_total{route!~"/api/v1/health|/metrics|unmatched", status_code=~"5.."}[5m]))
+            (sum(rate(meditriage_http_requests_total{route!~"/api/v1/health|/metrics|unmatched", status_code=~"5.."}[5m])) or vector(0))
             /
             sum(rate(meditriage_http_requests_total{route!~"/api/v1/health|/metrics|unmatched"}[5m]))
           )
@@ -82,25 +82,25 @@ groups:
     rules:
       - record: meditriage:availability_error:ratio_rate5m
         expr: |
-          sum(rate(meditriage_http_requests_total{route!~"/api/v1/health|/metrics|unmatched", status_code=~"5.."}[5m]))
+          (sum(rate(meditriage_http_requests_total{route!~"/api/v1/health|/metrics|unmatched", status_code=~"5.."}[5m])) or vector(0))
           /
           sum(rate(meditriage_http_requests_total{route!~"/api/v1/health|/metrics|unmatched"}[5m]))
 
       - record: meditriage:availability_error:ratio_rate30m
         expr: |
-          sum(rate(meditriage_http_requests_total{route!~"/api/v1/health|/metrics|unmatched", status_code=~"5.."}[30m]))
+          (sum(rate(meditriage_http_requests_total{route!~"/api/v1/health|/metrics|unmatched", status_code=~"5.."}[30m])) or vector(0))
           /
           sum(rate(meditriage_http_requests_total{route!~"/api/v1/health|/metrics|unmatched"}[30m]))
 
       - record: meditriage:availability_error:ratio_rate1h
         expr: |
-          sum(rate(meditriage_http_requests_total{route!~"/api/v1/health|/metrics|unmatched", status_code=~"5.."}[1h]))
+          (sum(rate(meditriage_http_requests_total{route!~"/api/v1/health|/metrics|unmatched", status_code=~"5.."}[1h])) or vector(0))
           /
           sum(rate(meditriage_http_requests_total{route!~"/api/v1/health|/metrics|unmatched"}[1h]))
 
       - record: meditriage:availability_error:ratio_rate6h
         expr: |
-          sum(rate(meditriage_http_requests_total{route!~"/api/v1/health|/metrics|unmatched", status_code=~"5.."}[6h]))
+          (sum(rate(meditriage_http_requests_total{route!~"/api/v1/health|/metrics|unmatched", status_code=~"5.."}[6h])) or vector(0))
           /
           sum(rate(meditriage_http_requests_total{route!~"/api/v1/health|/metrics|unmatched"}[6h]))
 
@@ -149,7 +149,7 @@ groups:
       - record: meditriage:sli_availability:ratio_30d
         expr: |
           1 - (
-            sum(increase(meditriage_http_requests_total{route!~"/api/v1/health|/metrics|unmatched", status_code=~"5.."}[30d]))
+            (sum(increase(meditriage_http_requests_total{route!~"/api/v1/health|/metrics|unmatched", status_code=~"5.."}[30d])) or vector(0))
             /
             sum(increase(meditriage_http_requests_total{route!~"/api/v1/health|/metrics|unmatched"}[30d]))
           )
