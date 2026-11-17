@@ -159,3 +159,36 @@ groups:
           sum(increase(meditriage_http_request_duration_seconds_bucket{le="3", route!~"/api/v1/health|/metrics|unmatched", status_code!~"5.."}[30d]))
           /
           sum(increase(meditriage_http_request_duration_seconds_count{route!~"/api/v1/health|/metrics|unmatched", status_code!~"5.."}[30d]))
+
+
+
+  # ---------------------------------------------------------------------------------------
+  # Alerta multi-window multi-burn-rate de disponibilidad (tarjeta 16).
+  # SLO 99,5 % => budget = 0,5 %.  burn = ratio_errores / 0,005  ->  umbral = burn * 0,005
+  #   Rama rápida: 1 h y 5 min sobre burn 14,4  (umbral 7,2 %)
+  #   Rama lenta : 6 h y 30 min sobre burn 6    (umbral 3 %)
+  # Cada rama exige AMBAS ventanas (and): la larga confirma que se gastó budget,
+  # la corta confirma que el problema sigue ocurriendo.
+  # Sin `for:`: la ventana corta ya filtra el ruido.
+  # ---------------------------------------------------------------------------------------
+  - name: meditriage_alerts_burn_rate
+    rules:
+      - alert: MediTriageErrorBudgetBurn
+        expr: |
+          (
+            meditriage:availability_error:ratio_rate1h > (14.4 * 0.005)
+            and
+            meditriage:availability_error:ratio_rate5m > (14.4 * 0.005)
+          )
+          or
+          (
+            meditriage:availability_error:ratio_rate6h > (6 * 0.005)
+            and
+            meditriage:availability_error:ratio_rate30m > (6 * 0.005)
+          )
+        labels:
+          severity: page
+          team: sre
+        annotations:
+          summary: "MediTriage está consumiendo el error budget de disponibilidad demasiado rápido"
+          runbook_url: ops/runbooks/triage-error-budget-burn.md
