@@ -10,6 +10,7 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from app.core.realtime import cerrar_cliente_redis
 
 from app.api.v1.endpoints import auth, health, patients, triage, ws
 from app.core.auth import usuario_actual
@@ -51,6 +52,9 @@ async def lifespan(_: FastAPI):
             with conn:
                 verificar_clave_cifrado(conn)
     yield
+    logger.info("shutdown_iniciado")
+    cerrar_cliente_redis()
+    logger.info("shutdown_completo")
 
 app = FastAPI(
     title="MediTriage API",
@@ -192,6 +196,9 @@ def root():
     return {"message": "Servidor MediTriage activo", "docs": "/docs"}
 
 if __name__ == "__main__":
-    # Lee el puerto de la variable de entorno $PORT, si no existe usa 8000
     puerto = int(os.environ.get("PORT", 8000))
-    uvicorn.run("main:app", host="0.0.0.0", port=puerto, reload=True, log_config=None)
+    espera = int(os.environ.get("SHUTDOWN_TIMEOUT", 20))
+    uvicorn.run(
+        "main:app", host="0.0.0.0", port=puerto, reload=True, log_config=None,
+        timeout_graceful_shutdown=espera,
+    )
