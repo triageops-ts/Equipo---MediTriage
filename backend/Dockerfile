@@ -54,5 +54,9 @@ EXPOSE 8000
 
 USER nonroot
 
-# Reutiliza el arranque de main.py (lee $PORT con fallback a 8000)
-CMD ["python", "app/main.py"]
+# Factor 08 (concurrencia): uvicorn lee WEB_CONCURRENCY como número de workers.
+ENV WEB_CONCURRENCY=1
+ENV SHUTDOWN_TIMEOUT=20
+
+# `exec` hace que uvicorn reciba SIGTERM directamente (si no, lo recibiría `sh` y no lo reenviaría).
+CMD ["sh", "-c", "exec python -m uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --timeout-graceful-shutdown ${SHUTDOWN_TIMEOUT}"]
