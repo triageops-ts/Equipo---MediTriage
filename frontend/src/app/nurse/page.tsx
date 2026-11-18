@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
@@ -11,7 +10,10 @@ import { AnamnesisPainCard } from "@/components/clinical/AnamnesisPainCard";
 import {
   ApiError,
   enviarFormulario,
+  evaluarTriage,
+  type ClasificacionIA,
   type ErrorCampo,
+  type EsiLevel,
   type FormularioClinicoRespuesta,
   type NivelConciencia,
   type PacienteEncontrado,
@@ -54,6 +56,18 @@ const FORM_VACIO: FormState = {
 
 const MAX_MOTIVO = 1000;
 
+// El backend entrega el nivel ESI; la etiqueta de gravedad es solo su nombre en pantalla.
+const GRAVEDAD_POR_ESI: Record<EsiLevel, string> = {
+  1: "RESUCITACIÓN",
+  2: "EMERGENCIA",
+  3: "URGENCIA",
+  4: "URGENCIA MENOR",
+  5: "NO URGENTE",
+};
+
+const AVISO_FALLBACK =
+  "Sugerencia por reglas: la IA no respondió a tiempo.";
+
 const aNumero = (texto: string): number =>
   texto.trim() === "" ? NaN : Number(texto);
 
@@ -68,16 +82,14 @@ export default function NurseTriagePage() {
   const [resultado, setResultado] =
     useState<FormularioClinicoRespuesta | null>(null);
 
-  // Recomendación de ejemplo: todavía no existe conexión con un endpoint de IA.
-  const [recommendation, setRecommendation] = useState({
-    esi: 3,
-    gravedad: "URGENCIA",
-    justificacion: [
-      "Complete los datos y pulse Actualizar para ver una recomendación de ejemplo.",
-    ],
-  });
-
+  // Solo guardamos el id del episodio (UUID, no identifica al paciente) y lo que
+  // respondió el backend. Nada de esto contiene RUT, nombre ni datos clínicos.
+  const [episodioId, setEpisodioId] = useState<string | null>(null);
+  const [clasificacion, setClasificacion] = useState<ClasificacionIA | null>(
+    null
+  );
   const [isLoading, setIsLoading] = useState(false);
+  const [errorIA, setErrorIA] = useState<string | null>(null);
 
   // Borra todo lo que identifica al paciente: formulario, paciente elegido y el buscador.
   // No toca `resultado`, que solo tiene el id del episodio y su estado.
@@ -94,6 +106,9 @@ export default function NurseTriagePage() {
       if (!e.persisted) return;
       limpiarDatosPersonales();
       setResultado(null);
+      setEpisodioId(null);
+      setClasificacion(null);
+      setErrorIA(null);
       setError(null);
       setErroresCampo([]);
     };
@@ -143,36 +158,22 @@ export default function NurseTriagePage() {
   };
 
   const handleUpdateTriage = async () => {
+    if (!episodioId) {
+      setErrorIA("Registre el ingreso del paciente antes de pedir la evaluación.");
+      return;
+    }
+
     setIsLoading(true);
+    setErrorIA(null);
 
     try {
-      await new Promise((resolve) => setTimeout(resolve, 800));
-
-      const fc = aNumero(formData.frecuencia_cardiaca);
-      const spo2 = aNumero(formData.saturacion_oxigeno);
-      const dolor = formData.escala_dolor ?? 0;
-
-      if (fc < 100 && dolor < 5) {
-        setRecommendation({
-          esi: 3,
-          gravedad: "URGENCIA",
-          justificacion: [
-            "Signos vitales en rango de estabilidad hemodinámica relativa.",
-            "Requiere múltiples recursos diagnósticos complementarios.",
-            "Dolor moderado controlado sin signos de compromiso inminente.",
-          ],
-        });
-      } else {
-        setRecommendation({
-          esi: 2,
-          gravedad: "EMERGENCIA",
-          justificacion: [
-            `Frecuencia cardíaca en ${fc} bpm con dolor en escala ${dolor}/10.`,
-            `Saturación de oxígeno en ${spo2}% requerirá monitoreo activo.`,
-            "Se mantiene criterio de alta prioridad por presentación de síntomas.",
-          ],
-        });
-      }
+      setClasificacion(await evaluarTriage(episodioId));
+    } catch (e) {
+      setErrorIA(
+        e instanceof ApiError
+          ? e.message
+          : "No se pudo obtener la evaluación. Intente nuevamente."
+      );
     } finally {
       setIsLoading(false);
     }
@@ -282,6 +283,9 @@ export default function NurseTriagePage() {
       });
 
       setResultado(respuesta);
+      setEpisodioId(respuesta.episodio_id);
+      setClasificacion(null);
+      setErrorIA(null);
       limpiarDatosPersonales(); // ya quedó guardado en el servidor: no hace falta tenerlo en el navegador
     } catch (e) {
       if (e instanceof ApiError) {
@@ -302,6 +306,9 @@ export default function NurseTriagePage() {
 const handleNuevoIngreso = () => {
   limpiarDatosPersonales();
   setResultado(null);
+  setEpisodioId(null);
+  setClasificacion(null);
+  setErrorIA(null);
   setError(null);
   setErroresCampo([]);
 };
@@ -533,9 +540,18 @@ const handleNuevoIngreso = () => {
 
         <section className="lg:col-span-4 h-full">
           <AIAssistantCard
-            esi={recommendation.esi}
-            gravedad={recommendation.gravedad}
-            justificacion={recommendation.justificacion}
+            esi={clasificacion?.nivel_esi_sugerido ?? null}
+            gravedad={
+              clasificacion
+                ? GRAVEDAD_POR_ESI[clasificacion.nivel_esi_sugerido]
+                : null
+            }
+            justificacion={clasificacion?.justificacion_ia ?? null}
+            avisoFallback={
+              clasificacion?.fallback_aplicado ? AVISO_FALLBACK : null
+            }
+            error={errorIA}
+            sinEpisodio={episodioId === null}
             onUpdate={handleUpdateTriage}
             isLoading={isLoading}
           />
