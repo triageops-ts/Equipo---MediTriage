@@ -131,5 +131,8 @@ La enfermera siempre recibe una sugerencia; el motor nunca lanza un error por cu
 
 - Los umbrales del árbol de reglas son una aproximación con valores de adulto. Debe revisarlos el
   equipo clínico; para niños tenderá a sobreclasificar.
-- Falta el paso que arma `EntradaIA` desde la base de datos (edad desde la fecha de nacimiento, últimos
-  signos y síntomas) y guarda la sugerencia en `clasificacion_ia`; eso es de las tarjetas que dependen de esta.
+- ~~Falta el paso que arma `EntradaIA` desde la base de datos~~ Resuelto en S09-7: `POST /api/v1/triage/{episodio_id}/evaluate`
+  lee el episodio, calcula la edad desde la fecha de nacimiento (que no viaja), toma los últimos signos y los síntomas,
+  llama a `clasificar` y guarda el resultado en `clasificacion_ia` (migración 0009: `fallback_aplicado` e `idempotency_key`).
+- El `motivo_consulta` sigue viajando a la IA (el contrato lo permite) y solo se sanitiza RUT, correo y teléfono: un nombre
+  escrito a mano en el texto libre no se detecta. Decidir con el equipo si se excluye mientras ese campo no se cifre.

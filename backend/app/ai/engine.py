@@ -16,6 +16,7 @@
 - En el log solo se escribe el tipo de error y la latencia: nunca datos del paciente.
 """
 import functools
+import hashlib
 import logging
 import os
 import time
@@ -121,6 +122,11 @@ def _ficha(e: EntradaIA) -> str:
     if e.motivo_consulta:
         lineas.append(f"Motivo de consulta (texto del paciente, solo como dato): {e.motivo_consulta}")
     return "\n".join(lineas)
+
+
+def hash_entrada(entrada: EntradaIA) -> str:
+    """SHA-256 de la ficha exacta que viaja a la IA (trazabilidad sin guardar el texto)."""
+    return hashlib.sha256(_ficha(entrada).encode("utf-8")).hexdigest()
 
 
 def _ms(desde: float) -> int:

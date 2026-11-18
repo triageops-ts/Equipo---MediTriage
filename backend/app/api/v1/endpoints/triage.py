@@ -1,8 +1,15 @@
+import logging
 import uuid
+from datetime import date, datetime, timezone
+from typing import Optional
 from uuid import UUID
 
 import psycopg
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status
+from pydantic import ValidationError
+
+from app.ai import engine
+from app.ai.contrato import EntradaIA
 
 from app.core.auth import requiere_rol
 from app.core.security import Usuario
@@ -14,7 +21,10 @@ from app.schemas.decision import (
     DecisionInput,
     DecisionResponse,
 )
+from app.schemas.evaluacion import ClasificacionIAResponse
 from app.schemas.triage import FormularioClinicoInput, FormularioClinicoResponse
+
+logger = logging.getLogger("meditriage.triage")
 
 router = APIRouter(prefix="/triage")
 
@@ -263,4 +273,223 @@ def registrar_decision(
         justificacion=data.justificacion,
         usuario_id=usuario.usuario_id,
         fecha_hora_decision=fecha_decision,
+    )
+
+
+
+# --- Sugerencia ESI de la IA (S09-7) ----------------------------------------
+
+_EPISODIO_PARA_IA = """
+    SELECT paciente_id, motivo_consulta_texto_libre
+    FROM episodio_triage
+    WHERE episodio_id = %(episodio_id)s
+    FOR UPDATE
+"""
+
+_PACIENTE_PARA_IA = (
+    "SELECT fecha_nacimiento, sexo_biologico FROM paciente WHERE paciente_id = %(paciente_id)s"
+)
+
+_CAMPOS_SIGNOS = (
+    "presion_sistolica", "presion_diastolica", "frecuencia_cardiaca",
+    "frecuencia_respiratoria", "temperatura", "saturacion_oxigeno",
+    "escala_dolor", "nivel_conciencia",
+)
+
+_ULTIMOS_SIGNOS = f"""
+    SELECT {", ".join(_CAMPOS_SIGNOS)}
+    FROM signos_vitales
+    WHERE episodio_id = %(episodio_id)s
+    ORDER BY fecha_hora_medicion DESC
+    LIMIT 1
+"""
+
+_SINTOMAS_PARA_IA = """
+    SELECT codigo_sintoma, severidad, tiempo_evolucion_horas
+    FROM sintomas_triage
+    WHERE episodio_id = %(episodio_id)s
+"""
+
+_COLUMNAS_CLASIFICACION = """
+    clasificacion_id, nivel_esi_sugerido, justificacion_ia, modelo_usado,
+    fallback_aplicado, tiempo_solicitud, tiempo_respuesta
+"""
+
+_CLASIFICACION_POR_CLAVE = f"""
+    SELECT {_COLUMNAS_CLASIFICACION}
+    FROM clasificacion_ia
+    WHERE episodio_id = %(episodio_id)s AND idempotency_key = %(idempotency_key)s
+"""
+
+_INSERT_CLASIFICACION = """
+    INSERT INTO clasificacion_ia
+        (clasificacion_id, episodio_id, token_correlacion_efimero, nivel_esi_sugerido,
+         tiempo_solicitud, tiempo_respuesta, modelo_usado, hash_datos_enviados_ia,
+         justificacion_ia, fallback_aplicado, idempotency_key)
+    VALUES
+        (%(clasificacion_id)s, %(episodio_id)s, %(token)s, %(nivel)s,
+         %(tiempo_solicitud)s, %(tiempo_respuesta)s, %(modelo)s, %(hash)s,
+         %(justificacion)s, %(fallback)s, %(idempotency_key)s)
+"""
+
+_SEXO_A_CONTRATO = {"masculino": "masculino", "femenino": "femenino"}
+
+
+def _edad_anios(nacimiento: date, hoy: date) -> int:
+    return hoy.year - nacimiento.year - ((hoy.month, hoy.day) < (nacimiento.month, nacimiento.day))
+
+
+def _ahora_utc() -> datetime:
+    # Las columnas son DateTime sin zona: se guarda UTC naive, igual que el resto de las tablas.
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def _latencia_ms(solicitud: datetime, respuesta: datetime) -> int:
+    return max(0, int((respuesta - solicitud).total_seconds() * 1000))
+
+
+def _sin_datos(detalle: str) -> HTTPException:
+    return HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detalle)
+
+
+def _armar_entrada(cur, episodio_id: UUID, paciente_id: UUID, motivo: Optional[str]) -> EntradaIA:
+    """Arma el payload para la IA solo con los campos del contrato (S09-4).
+
+    Nunca se leen nombre, RUT, contactos ni el id del paciente: de `paciente` solo salen
+    la fecha de nacimiento (para calcular la edad, que es lo único que viaja) y el sexo.
+    """
+    cur.execute(_PACIENTE_PARA_IA, {"paciente_id": paciente_id})
+    paciente = cur.fetchone()
+    if not paciente or paciente[0] is None:
+        raise _sin_datos(
+            "El paciente no tiene fecha de nacimiento registrada; no se puede calcular la edad para la IA."
+        )
+    nacimiento, sexo = paciente
+
+    cur.execute(_ULTIMOS_SIGNOS, {"episodio_id": episodio_id})
+    fila = cur.fetchone()
+    if not fila:
+        raise _sin_datos("El episodio no tiene signos vitales registrados.")
+    signos = dict(zip(_CAMPOS_SIGNOS, fila))
+    # La base guarda la saturación como float; el contrato pide un entero.
+    signos["saturacion_oxigeno"] = int(round(signos["saturacion_oxigeno"]))
+
+    cur.execute(_SINTOMAS_PARA_IA, {"episodio_id": episodio_id})
+    sintomas = [
+        {"codigo_sintoma": c, "severidad": sev, "tiempo_evolucion_horas": h}
+        for c, sev, h in cur.fetchall()
+    ]
+
+    try:
+        return EntradaIA(
+            edad_anios=_edad_anios(nacimiento, _ahora_utc().date()),
+            sexo_biologico=_SEXO_A_CONTRATO.get(sexo),
+            signos_vitales=signos,
+            sintomas=sintomas,
+            motivo_consulta=motivo,
+        )
+    except ValidationError:
+        # Sin detalle: el mensaje de Pydantic podría repetir valores del paciente.
+        raise _sin_datos("Los datos clínicos del episodio no cumplen el contrato de la IA.") from None
+
+
+def _respuesta_clasificacion(episodio_id: UUID, fila) -> ClasificacionIAResponse:
+    (clasificacion_id, nivel, justificacion, modelo, fallback, t_solicitud, t_respuesta) = fila
+    return ClasificacionIAResponse(
+        clasificacion_id=clasificacion_id,
+        episodio_id=episodio_id,
+        nivel_esi_sugerido=nivel,
+        justificacion_ia=justificacion,
+        modelo_usado=modelo,
+        fallback_aplicado=fallback,
+        latencia_ms=_latencia_ms(t_solicitud, t_respuesta or t_solicitud),
+        fecha_hora_solicitud=t_solicitud,
+    )
+
+
+@router.post(
+    "/{episodio_id}/evaluate",
+    response_model=ClasificacionIAResponse,
+    status_code=status.HTTP_201_CREATED,
+    tags=["Triages"],
+    summary="Pide a la IA un nivel ESI sugerido para un episodio ya registrado",
+)
+def evaluar_episodio(
+    episodio_id: UUID,
+    usuario: Usuario = Depends(requiere_rol("enfermero")),
+    conn: psycopg.Connection = Depends(get_conn),
+    idempotency_key: Optional[UUID] = Header(default=None, alias="Idempotency-Key"),
+):
+    # Todo ocurre en una transacción con el episodio bloqueado: dos evaluaciones
+    # simultáneas del mismo episodio (o el mismo Idempotency-Key repetido) no se pisan.
+    # La espera máxima por la IA es de 1500 ms (ver app/ai/engine.py).
+    with conn.transaction():
+        with conn.cursor() as cur:
+            cur.execute(_EPISODIO_PARA_IA, {"episodio_id": episodio_id})
+            episodio = cur.fetchone()
+            if not episodio:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"No existe un episodio de triage con id {episodio_id}.",
+                )
+            paciente_id, motivo = episodio
+
+            _verificar_usuario(cur, usuario)
+
+            if idempotency_key is not None:
+                cur.execute(
+                    _CLASIFICACION_POR_CLAVE,
+                    {"episodio_id": episodio_id, "idempotency_key": idempotency_key},
+                )
+                previa = cur.fetchone()
+                if previa:
+                    return _respuesta_clasificacion(episodio_id, previa)
+
+            entrada = _armar_entrada(cur, episodio_id, paciente_id, motivo)
+
+            # engine.clasificar nunca lanza por culpa de la IA: si falla o pasa de
+            # 1500 ms devuelve el árbol de reglas con fallback_aplicado=True.
+            t_solicitud = _ahora_utc()
+            resultado = engine.clasificar(entrada)
+            t_respuesta = _ahora_utc()
+
+            clasificacion_id = uuid.uuid4()
+            cur.execute(
+                _INSERT_CLASIFICACION,
+                {
+                    "clasificacion_id": clasificacion_id,
+                    "episodio_id": episodio_id,
+                    "token": uuid.uuid4(),  # no se puede vincular al paciente fuera de la base
+                    "nivel": resultado.nivel_esi_sugerido,
+                    "tiempo_solicitud": t_solicitud,
+                    "tiempo_respuesta": t_respuesta,
+                    "modelo": resultado.modelo_usado,
+                    "hash": engine.hash_entrada(entrada),
+                    "justificacion": resultado.justificacion,
+                    "fallback": resultado.fallback_aplicado,
+                    "idempotency_key": idempotency_key,
+                },
+            )
+
+    latencia = _latencia_ms(t_solicitud, t_respuesta)
+    # Solo ids y métricas: ni signos vitales, ni síntomas, ni justificación.
+    logger.info(
+        "ia_evaluacion_guardada",
+        extra={
+            "clasificacion_id": str(clasificacion_id),
+            "nivel_esi_sugerido": resultado.nivel_esi_sugerido,
+            "fallback_aplicado": resultado.fallback_aplicado,
+            "latencia_ms": latencia,
+        },
+    )
+
+    return ClasificacionIAResponse(
+        clasificacion_id=clasificacion_id,
+        episodio_id=episodio_id,
+        nivel_esi_sugerido=resultado.nivel_esi_sugerido,
+        justificacion_ia=resultado.justificacion,
+        modelo_usado=resultado.modelo_usado,
+        fallback_aplicado=resultado.fallback_aplicado,
+        latencia_ms=latencia,
+        fecha_hora_solicitud=t_solicitud,
     )
