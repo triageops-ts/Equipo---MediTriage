@@ -231,9 +231,15 @@ paths:
       tags:
         - Triages
       summary: Pide a la IA un nivel ESI sugerido
-      description: Envía a la IA los datos clínicos anonimizados del episodio y devuelve el nivel ESI sugerido con su justificación. Si la IA falla o tarda más de 1500 ms, se usa el árbol de reglas de respaldo y `fallback_aplicado` es true.
+      description: >
+        Recibe un episodio ya registrado, lee sus signos vitales y síntomas, arma el payload sin datos
+        personales (edad, sexo biológico, signos vitales, síntomas y motivo sanitizado), llama al motor de IA
+        y guarda el resultado en `clasificacion_ia`. Si la IA falla o tarda más de 1500 ms, se usa el árbol de
+        reglas de respaldo y `fallback_aplicado` es true. Requiere rol de enfermería. El paciente debe tener
+        fecha de nacimiento registrada (la IA recibe la edad, no la fecha). Con `Idempotency-Key`, repetir la
+        misma clave sobre el mismo episodio devuelve la clasificación ya guardada sin volver a llamar a la IA.
       operationId: evaluateTriage
-      x-estado: pendiente
+      x-estado: implementado
       parameters:
         - $ref: '#/components/parameters/EpisodioIdParam'
         - $ref: '#/components/parameters/IdempotencyKeyHeader'
@@ -246,6 +252,8 @@ paths:
                 $ref: '#/components/schemas/ClasificacionIA'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
         '422':

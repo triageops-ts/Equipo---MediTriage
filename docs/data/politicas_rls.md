@@ -48,7 +48,7 @@ Reglas que valen para todos los roles:
 - ¿El médico debe poder corregir datos del paciente? Hoy solo lee. Para permitirlo, basta ampliar la política `*_update`.
 - ¿El enfermero debe ver solo los pacientes de sus propios episodios? Hoy ve todos. Eso requeriría una política que consulte `episodio_triage` (usaría `app.usuario_id`).
 - ¿El auditor necesita ver pacientes? Hoy no. Si lo necesita, debería ser con datos anonimizados (una vista), no con la tabla directa.
-- `clasificacion_ia` hoy la escribe el enfermero. Cuando el motor de IA guarde sus resultados, hay que decidir si lo hace con el contexto del enfermero o con un rol propio.
+- `clasificacion_ia` la escribe el enfermero: `POST /triage/{id}/evaluate` (S09-7) guarda la sugerencia con el contexto del enfermero que la pidió. Si más adelante se prefiere un rol propio para la IA, habría que cambiar la política `clasificacion_ia_insert`.
 
 ## Qué hay que hacer una sola vez en Neon (fuera del repo)
 
