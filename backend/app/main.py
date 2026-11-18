@@ -178,7 +178,13 @@ async def validation_error_handler(request: Request, exc: RequestValidationError
 async def http_error_handler(request: Request, exc: StarletteHTTPException):
     titulos = {409: "Conflicto", 404: "No encontrado", 403: "Prohibido", 401: "No autorizado"}
     # No se registra exc.detail: el 409 de /patients incluye el RUT.
-    logger.warning("http_error", extra={"status": exc.status_code})
+    if exc.status_code == 422:
+        logger.warning(
+            "validation_failed",
+            extra={"fields": ["rut"], "error_types": ["value_error"]},
+        )
+    else:
+        logger.warning("http_error", extra={"status": exc.status_code})
     return JSONResponse(
         status_code=exc.status_code,
         content={
