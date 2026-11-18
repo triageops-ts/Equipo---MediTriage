@@ -79,3 +79,15 @@ def publicar_evento(tipo: str, data: dict[str, Any]) -> bool:
         )
         return False
     return True
+
+def cerrar_cliente_redis() -> None:
+    """Cierra el cliente de Redis del proceso (apagado ordenado). Es seguro llamarlo dos veces."""
+    global _cliente
+    if _cliente is None:
+        return
+    try:
+        _cliente.close()
+    except (redis.RedisError, OSError) as exc:
+        logger.warning("cierre_redis_fallido", extra={"error_type": type(exc).__name__})
+    finally:
+        _cliente = None

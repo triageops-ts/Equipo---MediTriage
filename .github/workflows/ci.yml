@@ -37,9 +37,44 @@ jobs:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           echo "Quality checks passed successfully!"
 
+  shutdown-test:
+    name: Apagado ordenado (SIGTERM en menos de 30 s)
+    needs: quality
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Construir la imagen
+        run: docker build -t meditriage-shutdown-test ./backend
+
+      - name: Enviar SIGTERM y medir el apagado
+        run: |
+          docker run -d --name api -e PORT=8000 -e WEB_CONCURRENCY=2 meditriage-shutdown-test
+
+          # Esperar a que arranquen los 2 workers (máximo 30 s)
+          for i in $(seq 1 30); do
+            listos=$(docker logs api 2>&1 | grep -c "Application startup complete" || true)
+            [ "$listos" -ge 2 ] && break
+            sleep 1
+          done
+          [ "$listos" -ge 2 ] || { echo "Los workers no arrancaron"; docker logs api; exit 1; }
+
+          inicio=$(date +%s)
+          docker kill --signal=SIGTERM api
+          codigo=$(docker wait api)
+          duracion=$(( $(date +%s) - inicio ))
+
+          docker logs api
+          completos=$(docker logs api 2>&1 | grep -c "shutdown_completo" || true)
+          echo "Apagado en ${duracion}s, código de salida ${codigo}, workers cerrados: ${completos}"
+
+          [ "$duracion" -lt 30 ] || { echo "El apagado tardó 30 s o más"; exit 1; }
+          [ "$completos" -ge 2 ] || { echo "No todos los workers cerraron en orden"; exit 1; }
+
   build-and-push:
     name: Build Multi-stage Image and Push to GHCR
-    needs: quality
+    needs: [quality, shutdown-test]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
 
