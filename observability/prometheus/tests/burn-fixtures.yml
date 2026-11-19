@@ -1,18 +1,14 @@
-# Fixtures sintéticos de la alerta MediTriageErrorBudgetBurn (tarjeta 16).
-# Se cargan series ya agregadas con valores inventados, porque 30 min de lab
-# no producen 6 h ni 30 d reales.
-#
-# Ejecutar desde la raíz del repo:
-#   promtool test rules observability/prometheus/tests/burn-fixtures.yml
-#
-# Umbrales: rama rápida 14,4 * 0,005 = 0,072 ; rama lenta 6 * 0,005 = 0,03
+﻿# Fixtures sinteticos para MediTriageErrorBudgetBurn.
+# Umbral disponibilidad: 0.5 %. Umbral latencia: 5 %.
+# Ejecutar: promtool test rules observability/prometheus/tests/burn-fixtures.yml
+
 rule_files:
   - ../rules.yml
 
 evaluation_interval: 1m
 
 tests:
-  # Caso 1: DISPARA. Rama rápida: 8 % en 1 h (burn 16) y 10 % en 5 min (burn 20).
+  # Caso 1: dispara por disponibilidad.
   - interval: 1m
     input_series:
       - series: 'meditriage:availability_error:ratio_rate1h'
@@ -27,12 +23,10 @@ tests:
               severity: page
               team: sre
             exp_annotations:
-              summary: "MediTriage está consumiendo el error budget de disponibilidad demasiado rápido"
+              summary: "MediTriage esta consumiendo el error budget de disponibilidad o latencia demasiado rapido"
               runbook_url: ops/runbooks/triage-error-budget-burn.md
 
-  # Caso 2: NO DISPARA. Ventana corta mala sin ventana larga.
-  #   rápida: 5 min en 10 % pero 1 h solo 2 %
-  #   lenta : 30 min en 18 % pero 6 h solo 2 % (burn 4 < 6)
+  # Caso 2: no dispara por disponibilidad si la ventana larga no supera el umbral.
   - interval: 1m
     input_series:
       - series: 'meditriage:availability_error:ratio_rate5m'
@@ -43,6 +37,40 @@ tests:
         values: '0.18+0x20'
       - series: 'meditriage:availability_error:ratio_rate6h'
         values: '0.02+0x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: MediTriageErrorBudgetBurn
+        exp_alerts: []
+
+  # Caso 3: dispara por degradacion de latencia.
+  - interval: 1m
+    input_series:
+      - series: 'meditriage:latency_error:ratio_rate1h'
+        values: '0.80+0x20'
+      - series: 'meditriage:latency_error:ratio_rate5m'
+        values: '0.85+0x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: MediTriageErrorBudgetBurn
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              team: sre
+            exp_annotations:
+              summary: "MediTriage esta consumiendo el error budget de disponibilidad o latencia demasiado rapido"
+              runbook_url: ops/runbooks/triage-error-budget-burn.md
+
+  # Caso 4: no dispara por latencia si la ventana larga no supera el umbral.
+  - interval: 1m
+    input_series:
+      - series: 'meditriage:latency_error:ratio_rate5m'
+        values: '0.85+0x20'
+      - series: 'meditriage:latency_error:ratio_rate1h'
+        values: '0.10+0x20'
+      - series: 'meditriage:latency_error:ratio_rate30m'
+        values: '0.25+0x20'
+      - series: 'meditriage:latency_error:ratio_rate6h'
+        values: '0.10+0x20'
     alert_rule_test:
       - eval_time: 10m
         alertname: MediTriageErrorBudgetBurn

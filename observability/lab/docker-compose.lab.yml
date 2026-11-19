@@ -1,0 +1,41 @@
+﻿services:
+  pushgateway:
+    image: prom/pushgateway:v1.10.0
+    container_name: meditriage-pushgateway-lab
+    ports:
+      - "19091:9091"
+
+  webhook-sink:
+    image: python:3.12-alpine
+    container_name: meditriage-webhook-lab
+    command: ["python", "/app/webhook_sink.py"]
+    volumes:
+      - ./webhook_sink.py:/app/webhook_sink.py:ro
+    ports:
+      - "19080:8080"
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: meditriage-alertmanager-lab
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+    volumes:
+      - ./alertmanager.lab.yml:/etc/alertmanager/alertmanager.yml:ro
+    ports:
+      - "19093:9093"
+    depends_on:
+      - webhook-sink
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    container_name: meditriage-prometheus-lab
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+    volumes:
+      - ./prometheus.lab.yml:/etc/prometheus/prometheus.yml:ro
+      - ../prometheus/rules.yml:/etc/prometheus/rules.yml:ro
+    ports:
+      - "19090:9090"
+    depends_on:
+      - pushgateway
+      - alertmanager
