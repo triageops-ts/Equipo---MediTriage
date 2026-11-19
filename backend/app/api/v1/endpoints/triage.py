@@ -1,7 +1,5 @@
 import logging
 import uuid
-import hashlib
-import json
 from datetime import date, datetime, timezone
 from typing import Optional
 from uuid import UUID
@@ -10,6 +8,7 @@ import psycopg
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import ValidationError
 
+from app import audit
 from app.ai import engine
 from app.ai.contrato import EntradaIA
 
@@ -308,6 +307,21 @@ def registrar_decision(
             )
             fecha_decision = cur.fetchone()[0]
 
+            # Misma transacción: si el log falla, la decisión también se revierte.
+            audit.registrar_evento(
+                cur,
+                episodio_id=episodio_id,
+                decision_id=decision_id,
+                evento_tipo=(
+                    audit.EVENTO_DECISION_CONFIRMADA
+                    if coincide
+                    else audit.EVENTO_DECISION_MODIFICADA
+                ),
+                usuario_id_actor=usuario.usuario_id,
+                sugerencia_ia=nivel_sugerido,
+                decision_final=data.nivel_esi_final,
+            )
+
     # La decisión ya quedó guardada (la transacción terminó): recién ahora se avisa
     # al tablero. Si Redis falla, publicar_evento solo deja un aviso en el log.
     publicar_evento(
@@ -373,96 +387,18 @@ def registrar_fallo_decision(
                 )
 
             nivel_sugerido = sugerencia[0]
-            registro_id = uuid.uuid4()
-            evento_tipo = "triage.decision.guardar_fallido"
-            fecha_evento = datetime.now(timezone.utc).replace(tzinfo=None)
-
-            # Serializa la generación de hashes para mantener la cadena.
-            cur.execute(
-                "SELECT pg_advisory_xact_lock(hashtext('registro_auditoria'))"
-            )
-
-            cur.execute(
-                """
-                SELECT hash_actual
-                FROM registro_auditoria
-                ORDER BY fecha_hora_evento DESC, registro_id DESC
-                LIMIT 1
-                """
-            )
-            anterior = cur.fetchone()
-            hash_anterior = anterior[0] if anterior else "0" * 64
-
-            coincide = data.nivel_esi_final == nivel_sugerido
-
-            contenido = {
-                "registro_id": str(registro_id),
-                "episodio_id": str(episodio_id),
-                "evento_tipo": evento_tipo,
-                "usuario_id_actor": str(usuario.usuario_id),
-                "sugerencia_ia": nivel_sugerido,
-                "decision_final": data.nivel_esi_final,
-                "hay_discrepancia": not coincide,
-                "fecha_hora_evento": fecha_evento.isoformat(),
-            }
-
-            contenido_json = json.dumps(
-                contenido,
-                sort_keys=True,
-                separators=(",", ":"),
-            )
-            hash_actual = hashlib.sha256(
-                (hash_anterior + contenido_json).encode("utf-8")
-            ).hexdigest()
-
-            cur.execute(
-                """
-                INSERT INTO registro_auditoria (
-                    registro_id,
-                    episodio_id,
-                    decision_id,
-                    evento_tipo,
-                    usuario_id_actor,
-                    sugerencia_ia,
-                    prompt_enviado,
-                    decision_final,
-                    hay_discrepancia,
-                    hash_anterior,
-                    hash_actual,
-                    fecha_hora_evento
-                )
-                VALUES (
-                    %(registro_id)s,
-                    %(episodio_id)s,
-                    NULL,
-                    %(evento_tipo)s,
-                    %(usuario_id_actor)s,
-                    %(sugerencia_ia)s,
-                    NULL,
-                    %(decision_final)s,
-                    %(hay_discrepancia)s,
-                    %(hash_anterior)s,
-                    %(hash_actual)s,
-                    %(fecha_hora_evento)s
-                )
-                """,
-                {
-                    "registro_id": registro_id,
-                    "episodio_id": episodio_id,
-                    "evento_tipo": evento_tipo,
-                    "usuario_id_actor": usuario.usuario_id,
-                    "sugerencia_ia": nivel_sugerido,
-                    "decision_final": data.nivel_esi_final,
-                    "hay_discrepancia": not coincide,
-                    "hash_anterior": hash_anterior,
-                    "hash_actual": hash_actual,
-                    "fecha_hora_evento": fecha_evento,
-                },
+            registro_id = audit.registrar_evento(
+                cur,
+                episodio_id=episodio_id,
+                evento_tipo=audit.EVENTO_DECISION_FALLIDA,
+                usuario_id_actor=usuario.usuario_id,
+                sugerencia_ia=nivel_sugerido,
+                decision_final=data.nivel_esi_final,
             )
 
     return {
         "registro_id": str(registro_id),
-        "evento_tipo": evento_tipo,
+        "evento_tipo": audit.EVENTO_DECISION_FALLIDA,
     }
 
 
@@ -658,6 +594,20 @@ def evaluar_episodio(
                     "fallback": resultado.fallback_aplicado,
                     "idempotency_key": idempotency_key,
                 },
+            )
+
+            # Misma transacción: guarda el prompt sanitizado que viajó a la IA.
+            audit.registrar_evento(
+                cur,
+                episodio_id=episodio_id,
+                evento_tipo=(
+                    audit.EVENTO_RESPALDO_APLICADO
+                    if resultado.fallback_aplicado
+                    else audit.EVENTO_IA_SUGERIDA
+                ),
+                usuario_id_actor=usuario.usuario_id,
+                sugerencia_ia=resultado.nivel_esi_sugerido,
+                prompt_enviado=engine.ficha_enviada(entrada),
             )
 
     latencia = _latencia_ms(t_solicitud, t_respuesta)

@@ -133,6 +133,11 @@ def _ficha(e: EntradaIA) -> str:
     return "\n".join(lineas)
 
 
+def ficha_enviada(entrada: EntradaIA) -> str:
+    """Texto exacto (ya sanitizado) que viaja a la IA; se guarda en la auditoría."""
+    return _ficha(entrada)
+
+
 def hash_entrada(entrada: EntradaIA) -> str:
     """SHA-256 de la ficha exacta que viaja a la IA (trazabilidad sin guardar el texto)."""
     return hashlib.sha256(_ficha(entrada).encode("utf-8")).hexdigest()
