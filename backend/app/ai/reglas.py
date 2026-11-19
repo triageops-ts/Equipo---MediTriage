@@ -74,6 +74,11 @@ def _criterios(e: EntradaIA) -> dict[int, list[str]]:
     return c
 
 
+def criterios_por_nivel(entrada: EntradaIA) -> dict[int, list[str]]:
+    """Criterios que se cumplen por nivel ESI (1 a 4). Lo usan también los guardrails."""
+    return _criterios(entrada)
+
+
 def clasificar_por_reglas(entrada: EntradaIA) -> tuple[int, str]:
     """Devuelve (nivel_esi, justificación). Gana el nivel más urgente que se cumpla."""
     criterios = _criterios(entrada)
