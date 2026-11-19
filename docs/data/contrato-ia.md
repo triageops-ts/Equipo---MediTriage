@@ -117,6 +117,8 @@ El límite es de **1500 ms** en total (ADR 0004). Si Claude no responde a tiempo
 o de cuota, falta la clave o la respuesta no cumple el formato de salida, se usa el árbol de reglas
 y el resultado sale con `fallback_aplicado = true` y `modelo_usado = "fallback-rule-engine"`.
 La enfermera siempre recibe una sugerencia; el motor nunca lanza un error por culpa de la IA.
+Desde la S09-10 el respaldo también se usa si la respuesta de la IA rompe un guardrail (nivel fuera de 1 a 5,
+justificación vacía o incoherente, signo crítico con ESI 4 o 5, uso de previsión o ubicación). Ver `docs/data/guardrails-ia.md`.
 
 ## Reglas del motor
 
@@ -136,3 +138,5 @@ La enfermera siempre recibe una sugerencia; el motor nunca lanza un error por cu
   llama a `clasificar` y guarda el resultado en `clasificacion_ia` (migración 0009: `fallback_aplicado` e `idempotency_key`).
 - El `motivo_consulta` sigue viajando a la IA (el contrato lo permite) y solo se sanitiza RUT, correo y teléfono: un nombre
   escrito a mano en el texto libre no se detecta. Decidir con el equipo si se excluye mientras ese campo no se cifre.
+  Desde la S09-10, las menciones de previsión (Fonasa/Isapre), nivel socioeconómico y ubicación dentro de ese texto se
+  reemplazan por `[OMITIDO]` antes de armar el prompt; los nombres siguen sin detectarse.
