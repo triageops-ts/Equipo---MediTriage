@@ -1,8 +1,7 @@
-
 "use client";
 
 import React, { useState } from "react";
-import type { EsiLevel } from "@/lib/api";
+import type { DecisionResponse, EsiLevel } from "@/lib/api";
 
 interface AIAssistantProps {
   esi: number | null;
@@ -22,13 +21,19 @@ interface AIAssistantProps {
   decisionGuardada?: boolean;
   decisionError?: string | null;
   decisionMensaje?: string | null;
+  /** Respuesta del backend (201) cuando la decisión ya quedó guardada. */
+  decisionResultado?: DecisionResponse | null;
 }
 
 const MOTIVOS_PREDEFINIDOS = {
   palidez: "Palidez observada durante la evaluación clínica.",
+  facies_dolor: "Facies de dolor observada durante la evaluación clínica.",
   dolor: "Dolor intenso referido por el paciente.",
   deterioro: "Deterioro clínico observado durante la evaluación.",
 } as const;
+
+const MOTIVO_MIN_CARACTERES = 10;
+const MOTIVO_MAX_CARACTERES = 1000;
 
 export const AIAssistantCard = ({
   esi,
@@ -45,20 +50,21 @@ export const AIAssistantCard = ({
   decisionGuardada = false,
   decisionError = null,
   decisionMensaje = null,
+  decisionResultado = null,
   onRetryDecision,
   decisionPendiente = false,
   evaluacionReal = false,
 }: AIAssistantProps) => {
+  // El panel de sobrescritura está cerrado hasta que se pulsa "Sobrescribir".
+  const [sobrescribiendo, setSobrescribiendo] = useState(false);
   const [nivelManual, setNivelManual] = useState<EsiLevel | null>(null);
-
-  const nivelManualActual =
-    nivelManual ?? (esi !== null && esi >= 1 && esi <= 5
-      ? (esi as EsiLevel)
-      : 3);
-
   const [tipoMotivo, setTipoMotivo] = useState("");
   const [motivoManual, setMotivoManual] = useState("");
 
+  const nivelSugerido: EsiLevel | null =
+    esi !== null && esi >= 1 && esi <= 5 ? (esi as EsiLevel) : null;
+
+  const nivelManualActual: EsiLevel = nivelManual ?? nivelSugerido ?? 3;
 
   const lineas = (justificacion ?? "")
     .split("\n")
@@ -66,43 +72,47 @@ export const AIAssistantCard = ({
     .filter(Boolean);
 
   const bloqueado =
-    sinEpisodio || esi === null || decisionLoading || decisionGuardada || decisionPendiente || !evaluacionReal;
+    sinEpisodio ||
+    nivelSugerido === null ||
+    decisionLoading ||
+    decisionGuardada ||
+    decisionPendiente ||
+    !evaluacionReal;
 
-  const motivoValido = motivoManual.trim().length >= 10;
+  const motivoValido = motivoManual.trim().length >= MOTIVO_MIN_CARACTERES;
+  const cambiaNivel = nivelSugerido !== null && nivelManualActual !== nivelSugerido;
 
   const seleccionarMotivo = (valor: string) => {
     setTipoMotivo(valor);
 
     if (valor in MOTIVOS_PREDEFINIDOS) {
       setMotivoManual(
-        MOTIVOS_PREDEFINIDOS[
-          valor as keyof typeof MOTIVOS_PREDEFINIDOS
-        ]
+        MOTIVOS_PREDEFINIDOS[valor as keyof typeof MOTIVOS_PREDEFINIDOS],
       );
     } else {
+      // "Otro motivo": el texto libre lo escribe la persona.
       setMotivoManual("");
     }
   };
 
-  // Escenario verde: confirmar el ESI sugerido sin justificación adicional.
+  const cerrarSobrescritura = () => {
+    setSobrescribiendo(false);
+    setNivelManual(null);
+    setTipoMotivo("");
+    setMotivoManual("");
+  };
+
+  // Confirmar: guarda el nivel sugerido tal cual, sin justificación.
   const confirmar = () => {
-    if (esi !== null && esi >= 1 && esi <= 5) {
-      onConfirm?.(esi as EsiLevel, "");
+    if (nivelSugerido !== null && !bloqueado) {
+      onConfirm?.(nivelSugerido, "");
     }
   };
 
-  // Si el nivel elegido coincide con la sugerencia, no requiere justificaci?n.
-  const sobrescribir = () => {
-    if (esi === null || bloqueado) return;
-
-    if (nivelManualActual === esi) {
-      onConfirm?.(nivelManualActual, "");
-      return;
-    }
-
-    if (motivoValido) {
-      onManualDecision?.(nivelManualActual, motivoManual.trim());
-    }
+  // Sobrescribir: nivel distinto al sugerido + motivo de al menos 10 caracteres.
+  const guardarSobrescritura = () => {
+    if (bloqueado || !cambiaNivel || !motivoValido) return;
+    onManualDecision?.(nivelManualActual, motivoManual.trim());
   };
 
   return (
@@ -139,14 +149,13 @@ export const AIAssistantCard = ({
           </span>
         </div>
 
-        {!evaluacionReal && (
+        {!sinEpisodio && !evaluacionReal && !isLoading && (
           <div
             role="status"
             className="bg-amber-50 border border-amber-200 text-amber-800 rounded-xl p-3 text-sm"
           >
-            A?n no existe una evaluaci?n cl?nica real para este episodio. La confirmaci?n y la modificaci?n?n es simulada. La confirmaci?n y la modificaci?n
-            del nivel ESI estar?n disponibles cuando se integre una evaluaci?n
-            real de IA.
+            Aún no hay una evaluación clínica para este episodio. Pulse
+            Actualizar: cuando exista, podrá confirmar o modificar el nivel ESI.
           </div>
         )}
 
@@ -168,7 +177,7 @@ export const AIAssistantCard = ({
           </div>
         )}
 
-        {/* Escenario rojo: error y reintento de guardado. */}
+        {/* Error al guardar (404, 409, 422 o pérdida de conexión). */}
         {decisionError && (
           <div
             role="alert"
@@ -189,6 +198,23 @@ export const AIAssistantCard = ({
               ? "Verificando decisión..."
               : "Reintentar guardado"}
           </button>
+        )}
+
+        {/* Escenario verde de US-02: decisión guardada y validada por un humano. */}
+        {decisionGuardada && decisionResultado && (
+          <div
+            role="status"
+            className="bg-emerald-50 border border-emerald-300 rounded-xl p-3 space-y-1"
+          >
+            <p className="font-bold text-emerald-800 text-sm">
+              ✔ Validado por un humano
+            </p>
+            <p className="text-xs text-emerald-800">
+              {decisionResultado.modificado_manualmente
+                ? `Modificado manualmente: ESI ${decisionResultado.nivel_esi_final} (la IA sugirió ESI ${decisionResultado.nivel_esi_sugerido}).`
+                : `Confirmado: coincide con la sugerencia de la IA (ESI ${decisionResultado.nivel_esi_final}).`}
+            </p>
+          </div>
         )}
 
         {decisionMensaje && (
@@ -228,7 +254,7 @@ export const AIAssistantCard = ({
       </div>
 
       <div className="space-y-3 pt-4 border-t border-slate-100">
-        {/* Escenario verde */}
+        {/* Escenario verde: confirmar */}
         <button
           type="button"
           onClick={confirmar}
@@ -240,88 +266,123 @@ export const AIAssistantCard = ({
             : `Confirmar y asignar ESI ${esi ?? "-"}`}
         </button>
 
-        {/* Escenario amarillo */}
-        <div className="space-y-2">
-          <label
-            htmlFor="nivel-esi-manual"
-            className="block text-sm font-semibold text-slate-700"
-          >
-            Nivel ESI definitivo
-          </label>
-
-          <select
-            id="nivel-esi-manual"
-            value={nivelManualActual}
-            onChange={(e) =>
-              setNivelManual(Number(e.target.value) as EsiLevel)
-            }
+        {/* Escenario amarillo: sobrescribir */}
+        {!sobrescribiendo ? (
+          <button
+            type="button"
+            onClick={() => setSobrescribiendo(true)}
             disabled={bloqueado}
-            className="w-full border border-slate-300 rounded-xl p-3 bg-white disabled:opacity-50"
+            className="disabled:opacity-50 w-full bg-[#ef4444] hover:bg-[#dc2626] text-white font-bold py-3.5 px-4 rounded-xl shadow-md transition-all"
           >
-            <option value={1}>ESI 1 - Resucitación</option>
-            <option value={2}>ESI 2 - Emergencia</option>
-            <option value={3}>ESI 3 - Urgencia</option>
-            <option value={4}>ESI 4 - Urgencia menor</option>
-            <option value={5}>ESI 5 - No urgente</option>
-          </select>
+            Sobrescribir nivel manualmente
+          </button>
+        ) : (
+          <div className="space-y-2 border border-red-200 bg-red-50/40 rounded-2xl p-3">
+            <label
+              htmlFor="nivel-esi-manual"
+              className="block text-sm font-semibold text-slate-700"
+            >
+              Nuevo nivel ESI
+            </label>
 
-          <label
-            htmlFor="tipo-motivo-esi"
-            className="block text-sm font-semibold text-slate-700"
-          >
-            Motivo de modificación
-          </label>
+            <select
+              id="nivel-esi-manual"
+              value={nivelManualActual}
+              onChange={(e) =>
+                setNivelManual(Number(e.target.value) as EsiLevel)
+              }
+              disabled={bloqueado}
+              className="w-full border border-slate-300 rounded-xl p-3 bg-white disabled:opacity-50"
+            >
+              <option value={1}>ESI 1 - Resucitación</option>
+              <option value={2}>ESI 2 - Emergencia</option>
+              <option value={3}>ESI 3 - Urgencia</option>
+              <option value={4}>ESI 4 - Urgencia menor</option>
+              <option value={5}>ESI 5 - No urgente</option>
+            </select>
 
-          <select
-            id="tipo-motivo-esi"
-            value={tipoMotivo}
-            onChange={(e) => seleccionarMotivo(e.target.value)}
-            disabled={bloqueado}
-            className="w-full border border-slate-300 rounded-xl p-3 bg-white disabled:opacity-50"
-          >
-            <option value="">Seleccione un motivo</option>
-            <option value="palidez">Palidez observada</option>
-            <option value="dolor">Dolor intenso</option>
-            <option value="deterioro">Deterioro clínico</option>
-            <option value="otro">Otro motivo (especificar)</option>
-          </select>
+            {!cambiaNivel && (
+              <p className="text-xs text-amber-700">
+                Elija un nivel distinto al sugerido por la IA (ESI {esi}). Para
+                mantenerlo, use «Confirmar».
+              </p>
+            )}
 
-          <label
-            htmlFor="motivo-esi-manual"
-            className="block text-sm font-semibold text-slate-700"
-          >
-            Justificación clínica
-          </label>
+            <label
+              htmlFor="tipo-motivo-esi"
+              className="block text-sm font-semibold text-slate-700"
+            >
+              Motivo de modificación
+            </label>
 
-          <textarea
-            id="motivo-esi-manual"
-            value={motivoManual}
-            onChange={(e) => setMotivoManual(e.target.value)}
-            maxLength={1000}
-            rows={3}
-            disabled={bloqueado}
-            placeholder="Explique brevemente la decisión clínica (mínimo 10 caracteres)."
-            className="w-full border border-slate-300 rounded-xl p-3 text-sm disabled:opacity-50"
-          />
+            <select
+              id="tipo-motivo-esi"
+              value={tipoMotivo}
+              onChange={(e) => seleccionarMotivo(e.target.value)}
+              disabled={bloqueado}
+              className="w-full border border-slate-300 rounded-xl p-3 bg-white disabled:opacity-50"
+            >
+              <option value="">Seleccione un motivo</option>
+              <option value="palidez">Palidez observada</option>
+              <option value="facies_dolor">Facies de dolor</option>
+              <option value="dolor">Dolor intenso</option>
+              <option value="deterioro">Deterioro clínico</option>
+              <option value="otro">Otro motivo (especificar)</option>
+            </select>
 
-          <p className="text-xs text-slate-500">
-            {motivoManual.trim().length}/1000 caracteres (mínimo 10).
-          </p>
-        </div>
+            <label
+              htmlFor="motivo-esi-manual"
+              className="block text-sm font-semibold text-slate-700"
+            >
+              Justificación clínica
+            </label>
 
-        <button
-          type="button"
-          onClick={sobrescribir}
-          disabled={
-            bloqueado ||
-            (esi !== null && nivelManualActual === esi
-              ? !onConfirm
-              : !motivoValido || !onManualDecision)
-          }
-          className="disabled:opacity-50 w-full bg-[#ef4444] hover:bg-[#dc2626] text-white font-bold py-3.5 px-4 rounded-xl shadow-md transition-all"
-        >
-          Sobrescribir nivel manualmente
-        </button>
+            <textarea
+              id="motivo-esi-manual"
+              value={motivoManual}
+              onChange={(e) => setMotivoManual(e.target.value)}
+              maxLength={MOTIVO_MAX_CARACTERES}
+              rows={3}
+              disabled={bloqueado}
+              placeholder={`Explique brevemente la decisión clínica (mínimo ${MOTIVO_MIN_CARACTERES} caracteres).`}
+              className="w-full border border-slate-300 rounded-xl p-3 text-sm disabled:opacity-50"
+            />
+
+            <p
+              className={`text-xs ${
+                motivoValido ? "text-slate-500" : "text-red-600"
+              }`}
+            >
+              {motivoManual.trim().length}/{MOTIVO_MAX_CARACTERES} caracteres
+              (mínimo {MOTIVO_MIN_CARACTERES}).
+            </p>
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={cerrarSobrescritura}
+                disabled={decisionLoading}
+                className="flex-1 border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-50 text-slate-700 font-semibold py-3 rounded-xl"
+              >
+                Cancelar
+              </button>
+
+              <button
+                type="button"
+                onClick={guardarSobrescritura}
+                disabled={
+                  bloqueado ||
+                  !cambiaNivel ||
+                  !motivoValido ||
+                  !onManualDecision
+                }
+                className="flex-1 disabled:opacity-50 bg-[#ef4444] hover:bg-[#dc2626] text-white font-bold py-3 rounded-xl shadow-md transition-all"
+              >
+                {decisionLoading ? "Guardando..." : "Guardar nivel"}
+              </button>
+            </div>
+          </div>
+        )}
 
         <p className="text-[10px] text-center text-slate-400 italic font-medium leading-normal pt-2">
           Decisión final bajo criterio exclusivo del profesional de enfermería.
