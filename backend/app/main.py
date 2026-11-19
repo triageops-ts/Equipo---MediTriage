@@ -1,4 +1,4 @@
-from contextlib import asynccontextmanager
+﻿from contextlib import asynccontextmanager
 import logging
 import os
 import time
@@ -28,8 +28,8 @@ from app.core.telemetry import (
 configure_logging(os.environ.get("LOG_LEVEL", "INFO").upper())
 logger = logging.getLogger("meditriage.api")
 
-# Observabilidad (OpenTelemetry): traces, métricas Prometheus en :9464 y trace_id en los logs.
-# Solo atributos sin datos personales: método, plantilla de ruta y código de estado.
+# Observabilidad (OpenTelemetry): traces, mÃ©tricas Prometheus en :9464 y trace_id en los logs.
+# Solo atributos sin datos personales: mÃ©todo, plantilla de ruta y cÃ³digo de estado.
 configure_telemetry()
 
 
@@ -40,7 +40,7 @@ async def lifespan(_: FastAPI):
     # Si la clave no coincide con los datos cifrados, el backend no arranca.
     url = os.environ.get("DATABASE_URL")
     if not url:
-        # Sin base configurada no hay datos cifrados que comprobar (por ejemplo, el despliegue de práctica).
+        # Sin base configurada no hay datos cifrados que comprobar (por ejemplo, el despliegue de prÃ¡ctica).
         logger.warning("key_check_skipped_no_database_url")
     else:
         try:
@@ -63,22 +63,22 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Públicos: /health y el login. Todo lo demás exige sesión válida (token en cookie o Bearer);
-# además cada endpoint indica qué roles puede usarlo (app/core/auth.py: requiere_rol).
+# PÃºblicos: /health y el login. Todo lo demÃ¡s exige sesiÃ³n vÃ¡lida (token en cookie o Bearer);
+# ademÃ¡s cada endpoint indica quÃ© roles puede usarlo (app/core/auth.py: requiere_rol).
 app.include_router(health.router, prefix="/api/v1")
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(patients.router, prefix="/api/v1", dependencies=[Depends(usuario_actual)])
 app.include_router(triage.router, prefix="/api/v1", dependencies=[Depends(usuario_actual)])
-# El WebSocket valida el token él mismo (un 401 HTTP no aplica a un canal ya abierto).
+# El WebSocket valida el token Ã©l mismo (un 401 HTTP no aplica a un canal ya abierto).
 app.include_router(ws.router, prefix="/api/v1")
 
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
-    # El id lo genera el servidor (no se confía en un header del cliente). Por la misma razón
-    # no se lee `traceparent`: cada petición abre su propio trace.
+    # El id lo genera el servidor (no se confÃ­a en un header del cliente). Por la misma razÃ³n
+    # no se lee `traceparent`: cada peticiÃ³n abre su propio trace.
     token = request_id_var.set(uuid.uuid4().hex)
     inicio = time.perf_counter()
-    # El span queda activo mientras dura la petición: los logs de abajo y los de los
+    # El span queda activo mientras dura la peticiÃ³n: los logs de abajo y los de los
     # endpoints salen con su trace_id.
     with iniciar_span(request.method) as span:
         try:
@@ -98,7 +98,7 @@ async def log_requests(request: Request, call_next):
             )
             raise
         else:
-            # Los valores de parámetros de ruta (/patients/{id}) no se registran.
+            # Los valores de parÃ¡metros de ruta (/patients/{id}) no se registran.
             ruta = ruta_sin_parametros(request.url.path, request.scope.get("path_params", {}))
             duracion = time.perf_counter() - inicio
             registrar_peticion(
@@ -120,22 +120,22 @@ async def log_requests(request: Request, call_next):
 
 _PROBLEM_BASE = "https://api.meditriage.com/problems"
 
-# Mensajes en español para los errores de tipo más comunes de Pydantic.
+# Mensajes en espaÃ±ol para los errores de tipo mÃ¡s comunes de Pydantic.
 _MENSAJES = {
     "missing": "Campo obligatorio.",
     "extra_forbidden": "Campo no permitido.",
-    "int_type": "Debe ser un número entero.",
-    "int_parsing": "Debe ser un número entero.",
-    "int_from_float": "Debe ser un número entero.",
-    "float_type": "Debe ser un número válido.",
-    "float_parsing": "Debe ser un número válido.",
-    "finite_number": "Debe ser un número válido.",
-    "uuid_parsing": "Debe ser un identificador UUID válido.",
-    "uuid_type": "Debe ser un identificador UUID válido.",
+    "int_type": "Debe ser un nÃºmero entero.",
+    "int_parsing": "Debe ser un nÃºmero entero.",
+    "int_from_float": "Debe ser un nÃºmero entero.",
+    "float_type": "Debe ser un nÃºmero vÃ¡lido.",
+    "float_parsing": "Debe ser un nÃºmero vÃ¡lido.",
+    "finite_number": "Debe ser un nÃºmero vÃ¡lido.",
+    "uuid_parsing": "Debe ser un identificador UUID vÃ¡lido.",
+    "uuid_type": "Debe ser un identificador UUID vÃ¡lido.",
     "string_type": "Debe ser texto.",
     "bool_type": "Debe ser verdadero o falso.",
     "bool_parsing": "Debe ser verdadero o falso.",
-    "json_invalid": "El cuerpo de la petición no es un JSON válido.",
+    "json_invalid": "El cuerpo de la peticiÃ³n no es un JSON vÃ¡lido.",
 }
 
 def _campo(loc) -> str:
@@ -163,9 +163,10 @@ async def validation_error_handler(request: Request, exc: RequestValidationError
     )
     return JSONResponse(
         status_code=422,
+        media_type="application/problem+json",
         content={
             "type": f"{_PROBLEM_BASE}/validation-error",
-            "title": "Error de validación",
+            "title": "Error de validaciÃ³n",
             "status": 422,
             "detail": "; ".join(f"{e['field']}: {e['message']}" for e in errores),
             "instance": request.url.path,
@@ -187,6 +188,7 @@ async def http_error_handler(request: Request, exc: StarletteHTTPException):
         logger.warning("http_error", extra={"status": exc.status_code})
     return JSONResponse(
         status_code=exc.status_code,
+        media_type="application/problem+json",
         content={
             "type": f"{_PROBLEM_BASE}/{exc.status_code}",
             "title": titulos.get(exc.status_code, "Error"),

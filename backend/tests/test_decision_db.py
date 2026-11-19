@@ -159,3 +159,106 @@ def test_nivel_fuera_de_rango_422():
 def test_id_de_episodio_invalido_422():
     r = _post("/api/v1/triage/no-es-un-uuid/decision", json={"nivel_esi_final": 3})
     assert r.status_code == 422
+
+def test_consultar_decision_registrada():
+    ep = _episodio(sugerido=3)
+    creada = _decidir(
+        ep,
+        nivel_esi_final=2,
+        justificacion="Dificultad respiratoria observada."
+    )
+    assert creada.status_code == 201, creada.text
+
+    r = client.get(
+        f"/api/v1/triage/{ep}/decision",
+        headers=_cabecera_enfermero()
+    )
+
+    assert r.status_code == 200, r.text
+    b = r.json()
+    assert b["episodio_id"] == ep
+    assert b["nivel_esi_sugerido"] == 3
+    assert b["nivel_esi_final"] == 2
+    assert b["coincide_con_ia"] is False
+    assert b["modificado_manualmente"] is True
+    assert b["justificacion"] == "Dificultad respiratoria observada."
+    assert b["usuario_id"] is not None
+    assert b["fecha_hora_decision"] is not None
+
+
+def test_consultar_episodio_sin_decision_404():
+    ep = _episodio(sugerido=3)
+
+    r = client.get(
+        f"/api/v1/triage/{ep}/decision",
+        headers=_cabecera_enfermero()
+    )
+
+    assert r.status_code == 404
+    assert "no tiene una decisión registrada" in r.json()["detail"]
+
+def test_registrar_fallo_decision_guarda_auditoria():
+    ep = _episodio(sugerido=3)
+
+    r = _post(
+        f"/api/v1/triage/{ep}/decision/fallo",
+        json={
+            "nivel_esi_final": 4,
+            "justificacion": "Fallo de conexión al guardar la decisión",
+        },
+    )
+
+    assert r.status_code == 201, r.text
+    assert r.json()["evento_tipo"] == "triage.decision.guardar_fallido"
+
+    with psycopg.connect(
+        os.environ.get("MIGRATION_DATABASE_URL") or os.environ["DATABASE_URL"]
+    ) as conn:
+        fila = conn.execute(
+            """
+            SELECT evento_tipo, sugerencia_ia, decision_final,
+                   hay_discrepancia, hash_anterior, hash_actual
+            FROM registro_auditoria
+            WHERE episodio_id = %s
+            ORDER BY fecha_hora_evento DESC
+            LIMIT 1
+            """,
+            (ep,),
+        ).fetchone()
+
+    assert fila is not None
+    assert fila[0] == "triage.decision.guardar_fallido"
+    assert fila[1] == 3
+    assert fila[2] == 4
+    assert fila[3] is True
+    assert len(fila[4]) == 64
+    assert len(fila[5]) == 64
+    assert fila[4] != fila[5]
+
+
+def test_fallo_decision_sin_sugerencia_ia_no_registra_auditoria():
+    ep = _episodio(sugerido=None)
+
+    r = _post(
+        f"/api/v1/triage/{ep}/decision/fallo",
+        json={
+            "nivel_esi_final": 3,
+            "justificacion": "Fallo de conexión al guardar la decisión",
+        },
+    )
+
+    assert r.status_code == 409, r.text
+
+    with psycopg.connect(
+        os.environ.get("MIGRATION_DATABASE_URL") or os.environ["DATABASE_URL"]
+    ) as conn:
+        cantidad = conn.execute(
+            """
+            SELECT count(*)
+            FROM registro_auditoria
+            WHERE episodio_id = %s
+            """,
+            (ep,),
+        ).fetchone()[0]
+
+    assert cantidad == 0

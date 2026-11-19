@@ -1,18 +1,34 @@
-import React from "react";
+
+"use client";
+
+import React, { useState } from "react";
+import type { EsiLevel } from "@/lib/api";
 
 interface AIAssistantProps {
   esi: number | null;
   gravedad: string | null;
-  /** Texto que devuelve la IA; si trae varias líneas se muestra una viñeta por línea. */
   justificacion: string | null;
-  /** Aviso cuando el backend aplicó reglas en vez de la IA (fallback_aplicado). */
   avisoFallback?: string | null;
   error?: string | null;
-  /** Todavía no se registró el ingreso, así que no hay episodio que evaluar. */
   sinEpisodio?: boolean;
   onUpdate?: () => void;
   isLoading?: boolean;
+  onConfirm?: (nivel: EsiLevel, motivo: string) => void;
+  onRetryDecision?: () => void;
+  decisionPendiente?: boolean;
+  evaluacionReal?: boolean;
+  onManualDecision?: (nivel: EsiLevel, motivo: string) => void;
+  decisionLoading?: boolean;
+  decisionGuardada?: boolean;
+  decisionError?: string | null;
+  decisionMensaje?: string | null;
 }
+
+const MOTIVOS_PREDEFINIDOS = {
+  palidez: "Palidez observada durante la evaluación clínica.",
+  dolor: "Dolor intenso referido por el paciente.",
+  deterioro: "Deterioro clínico observado durante la evaluación.",
+} as const;
 
 export const AIAssistantCard = ({
   esi,
@@ -23,109 +39,294 @@ export const AIAssistantCard = ({
   sinEpisodio = false,
   onUpdate,
   isLoading = false,
+  onConfirm,
+  onManualDecision,
+  decisionLoading = false,
+  decisionGuardada = false,
+  decisionError = null,
+  decisionMensaje = null,
+  onRetryDecision,
+  decisionPendiente = false,
+  evaluacionReal = false,
 }: AIAssistantProps) => {
+  const [nivelManual, setNivelManual] = useState<EsiLevel | null>(null);
+
+  const nivelManualActual =
+    nivelManual ?? (esi !== null && esi >= 1 && esi <= 5
+      ? (esi as EsiLevel)
+      : 3);
+
+  const [tipoMotivo, setTipoMotivo] = useState("");
+  const [motivoManual, setMotivoManual] = useState("");
+
+
   const lineas = (justificacion ?? "")
     .split("\n")
-    .map((l) => l.trim())
+    .map((linea) => linea.trim())
     .filter(Boolean);
 
+  const bloqueado =
+    sinEpisodio || esi === null || decisionLoading || decisionGuardada || decisionPendiente || !evaluacionReal;
+
+  const motivoValido = motivoManual.trim().length >= 10;
+
+  const seleccionarMotivo = (valor: string) => {
+    setTipoMotivo(valor);
+
+    if (valor in MOTIVOS_PREDEFINIDOS) {
+      setMotivoManual(
+        MOTIVOS_PREDEFINIDOS[
+          valor as keyof typeof MOTIVOS_PREDEFINIDOS
+        ]
+      );
+    } else {
+      setMotivoManual("");
+    }
+  };
+
+  // Escenario verde: confirmar el ESI sugerido sin justificación adicional.
+  const confirmar = () => {
+    if (esi !== null && esi >= 1 && esi <= 5) {
+      onConfirm?.(esi as EsiLevel, "");
+    }
+  };
+
+  // Si el nivel elegido coincide con la sugerencia, no requiere justificaci?n.
+  const sobrescribir = () => {
+    if (esi === null || bloqueado) return;
+
+    if (nivelManualActual === esi) {
+      onConfirm?.(nivelManualActual, "");
+      return;
+    }
+
+    if (motivoValido) {
+      onManualDecision?.(nivelManualActual, motivoManual.trim());
+    }
+  };
+
   return (
-  <div className="bg-white border-4 border-orange-500 p-6 rounded-3xl shadow-lg flex flex-col justify-between h-full min-h-[500px]">
-    <div className="space-y-6">
-      {/* Cabecera con Asistente y Botón Actualizar */}
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <div className="bg-slate-800 text-white rounded-lg p-2 font-mono font-bold text-sm tracking-wider shadow">
-            Ai
+    <div className="bg-white border-4 border-orange-500 p-6 rounded-3xl shadow-lg flex flex-col justify-between h-full min-h-[500px]">
+      <div className="space-y-6">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <div className="bg-slate-800 text-white rounded-lg p-2 font-mono font-bold text-sm tracking-wider shadow">
+              Ai
+            </div>
+
+            <h3 className="font-bold text-slate-800 text-sm tracking-wide">
+              ASISTENTE IA - TriageOps
+            </h3>
           </div>
-          <h3 className="font-bold text-slate-800 text-sm tracking-wide">
-            ASISTENTE IA - TriageOps
-          </h3>
+
+          <button
+            type="button"
+            onClick={onUpdate}
+            disabled={isLoading || sinEpisodio || decisionGuardada}
+            className="bg-[#10b981] hover:bg-[#059669] active:scale-95 disabled:opacity-50 text-white font-bold px-5 py-2 rounded-xl text-sm shadow-md transition-all"
+          >
+            {isLoading ? "Analizando..." : "Actualizar"}
+          </button>
+        </div>
+
+        <div className="bg-orange-50 border border-orange-100 p-4 rounded-2xl flex flex-col justify-center items-center text-center shadow-inner py-5">
+          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
+            Recomendación:
+          </span>
+
+          <span className="text-2xl sm:text-3xl font-extrabold text-orange-600 tracking-tight">
+            {esi === null ? "Sin evaluar" : `ESI ${esi} - ${gravedad}`}
+          </span>
+        </div>
+
+        {!evaluacionReal && (
+          <div
+            role="status"
+            className="bg-amber-50 border border-amber-200 text-amber-800 rounded-xl p-3 text-sm"
+          >
+            A?n no existe una evaluaci?n cl?nica real para este episodio. La confirmaci?n y la modificaci?n?n es simulada. La confirmaci?n y la modificaci?n
+            del nivel ESI estar?n disponibles cuando se integre una evaluaci?n
+            real de IA.
+          </div>
+        )}
+
+        {error && (
+          <div
+            role="alert"
+            className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-3 text-sm"
+          >
+            {error}
+          </div>
+        )}
+
+        {avisoFallback && (
+          <div
+            role="status"
+            className="bg-amber-50 border border-amber-200 text-amber-800 rounded-xl p-3 text-sm font-medium"
+          >
+            {avisoFallback}
+          </div>
+        )}
+
+        {/* Escenario rojo: error y reintento de guardado. */}
+        {decisionError && (
+          <div
+            role="alert"
+            className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-3 text-sm"
+          >
+            {decisionError}
+          </div>
+        )}
+
+        {decisionPendiente && (
+          <button
+            type="button"
+            onClick={onRetryDecision}
+            disabled={decisionLoading}
+            className="w-full bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-bold py-3 rounded-xl"
+          >
+            {decisionLoading
+              ? "Verificando decisión..."
+              : "Reintentar guardado"}
+          </button>
+        )}
+
+        {decisionMensaje && (
+          <div
+            role="status"
+            className="bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl p-3 text-sm"
+          >
+            {decisionMensaje}
+          </div>
+        )}
+
+        <div className="space-y-3">
+          <h4 className="font-bold text-lg text-slate-800 tracking-tight">
+            Justificación:
+          </h4>
+
+          <ul className="space-y-2.5 text-sm text-slate-700 font-medium">
+            {lineas.length === 0 ? (
+              <li className="text-slate-500 font-normal">
+                {sinEpisodio
+                  ? "Registre el ingreso y pulse Actualizar para obtener la recomendación."
+                  : "Pulse Actualizar para obtener la recomendación."}
+              </li>
+            ) : (
+              lineas.map((item, index) => (
+                <li
+                  key={index}
+                  className="flex gap-2.5 items-start leading-relaxed"
+                >
+                  <span className="text-orange-500 font-bold">•</span>
+                  <span>{item}</span>
+                </li>
+              ))
+            )}
+          </ul>
+        </div>
+      </div>
+
+      <div className="space-y-3 pt-4 border-t border-slate-100">
+        {/* Escenario verde */}
+        <button
+          type="button"
+          onClick={confirmar}
+          disabled={bloqueado || !onConfirm}
+          className="disabled:opacity-50 w-full bg-[#10b981] hover:bg-[#059669] text-white font-bold py-3.5 px-4 rounded-xl shadow-md transition-all"
+        >
+          {decisionLoading
+            ? "Guardando decisión..."
+            : `Confirmar y asignar ESI ${esi ?? "-"}`}
+        </button>
+
+        {/* Escenario amarillo */}
+        <div className="space-y-2">
+          <label
+            htmlFor="nivel-esi-manual"
+            className="block text-sm font-semibold text-slate-700"
+          >
+            Nivel ESI definitivo
+          </label>
+
+          <select
+            id="nivel-esi-manual"
+            value={nivelManualActual}
+            onChange={(e) =>
+              setNivelManual(Number(e.target.value) as EsiLevel)
+            }
+            disabled={bloqueado}
+            className="w-full border border-slate-300 rounded-xl p-3 bg-white disabled:opacity-50"
+          >
+            <option value={1}>ESI 1 - Resucitación</option>
+            <option value={2}>ESI 2 - Emergencia</option>
+            <option value={3}>ESI 3 - Urgencia</option>
+            <option value={4}>ESI 4 - Urgencia menor</option>
+            <option value={5}>ESI 5 - No urgente</option>
+          </select>
+
+          <label
+            htmlFor="tipo-motivo-esi"
+            className="block text-sm font-semibold text-slate-700"
+          >
+            Motivo de modificación
+          </label>
+
+          <select
+            id="tipo-motivo-esi"
+            value={tipoMotivo}
+            onChange={(e) => seleccionarMotivo(e.target.value)}
+            disabled={bloqueado}
+            className="w-full border border-slate-300 rounded-xl p-3 bg-white disabled:opacity-50"
+          >
+            <option value="">Seleccione un motivo</option>
+            <option value="palidez">Palidez observada</option>
+            <option value="dolor">Dolor intenso</option>
+            <option value="deterioro">Deterioro clínico</option>
+            <option value="otro">Otro motivo (especificar)</option>
+          </select>
+
+          <label
+            htmlFor="motivo-esi-manual"
+            className="block text-sm font-semibold text-slate-700"
+          >
+            Justificación clínica
+          </label>
+
+          <textarea
+            id="motivo-esi-manual"
+            value={motivoManual}
+            onChange={(e) => setMotivoManual(e.target.value)}
+            maxLength={1000}
+            rows={3}
+            disabled={bloqueado}
+            placeholder="Explique brevemente la decisión clínica (mínimo 10 caracteres)."
+            className="w-full border border-slate-300 rounded-xl p-3 text-sm disabled:opacity-50"
+          />
+
+          <p className="text-xs text-slate-500">
+            {motivoManual.trim().length}/1000 caracteres (mínimo 10).
+          </p>
         </div>
 
         <button
           type="button"
-          onClick={onUpdate}
-          disabled={isLoading || sinEpisodio}
-          className="bg-[#10b981] hover:bg-[#059669] active:scale-95 disabled:opacity-50 text-white font-bold px-5 py-2 rounded-xl text-sm shadow-md transition-all cursor-pointer"
+          onClick={sobrescribir}
+          disabled={
+            bloqueado ||
+            (esi !== null && nivelManualActual === esi
+              ? !onConfirm
+              : !motivoValido || !onManualDecision)
+          }
+          className="disabled:opacity-50 w-full bg-[#ef4444] hover:bg-[#dc2626] text-white font-bold py-3.5 px-4 rounded-xl shadow-md transition-all"
         >
-          {isLoading ? "Analizando..." : "Actualizar"}
+          Sobrescribir nivel manualmente
         </button>
-      </div>
 
-      {/* Recomendación principal de nivel ESI */}
-      <div className="bg-orange-50 border border-orange-100 p-4 rounded-2xl flex flex-col justify-center items-center text-center shadow-inner py-5">
-        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
-          Recomendación:
-        </span>
-        <span className="text-2xl sm:text-3xl font-extrabold text-orange-600 tracking-tight">
-          {esi === null ? "Sin evaluar" : `ESI ${esi} - ${gravedad}`}
-        </span>
-      </div>
-
-      {error && (
-        <div
-          role="alert"
-          className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-3 text-sm"
-        >
-          {error}
-        </div>
-      )}
-
-      {avisoFallback && (
-        <div
-          role="status"
-          className="bg-amber-50 border border-amber-200 text-amber-800 rounded-xl p-3 text-sm font-medium"
-        >
-          {avisoFallback}
-        </div>
-      )}
-
-      {/* Justificación Médica */}
-      <div className="space-y-3">
-        <h4 className="font-bold text-lg text-slate-800 tracking-tight">
-          Justificación:
-        </h4>
-        <ul className="space-y-2.5 text-sm text-slate-700 font-medium">
-          {lineas.length === 0 ? (
-            <li className="text-slate-500 font-normal">
-              {sinEpisodio
-                ? "Registre el ingreso y pulse Actualizar para obtener la recomendación."
-                : "Pulse Actualizar para obtener la recomendación."}
-            </li>
-          ) : (
-            lineas.map((item, index) => (
-              <li key={index} className="flex gap-2.5 items-start leading-relaxed">
-                <span className="text-orange-500 font-bold">•</span>
-                <span>{item}</span>
-              </li>
-            ))
-          )}
-        </ul>
+        <p className="text-[10px] text-center text-slate-400 italic font-medium leading-normal pt-2">
+          Decisión final bajo criterio exclusivo del profesional de enfermería.
+        </p>
       </div>
     </div>
-
-    {/* Botones inferiores */}
-    <div className="space-y-3 pt-4 border-t border-slate-100">
-      <button
-        onClick={() => alert(`ESI ${esi} confirmado.`)}
-        disabled={esi === null}
-        className="disabled:opacity-50 w-full bg-[#10b981] hover:bg-[#059669] text-white font-bold py-3.5 px-4 rounded-xl shadow-md transition-all active:scale-[0.98]"
-      >
-        Confirmar y Asignar ESI {esi ?? "-"}
-      </button>
-
-      <button
-        onClick={() => alert("Sobrescritura manual")}
-        className="w-full bg-[#ef4444] hover:bg-[#dc2626] text-white font-bold py-3.5 px-4 rounded-xl shadow-md transition-all active:scale-[0.98]"
-      >
-        Sobrescribir Nivel Manualmente
-      </button>
-
-      <p className="text-[10px] text-center text-slate-400 italic font-medium leading-normal pt-2">
-        Decisión final bajo criterio exclusivo del profesional de enfermería.
-      </p>
-    </div>
-  </div>
-);
+  );
 };

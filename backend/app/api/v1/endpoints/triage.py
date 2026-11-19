@@ -1,5 +1,7 @@
 import logging
 import uuid
+import hashlib
+import json
 from datetime import date, datetime, timezone
 from typing import Optional
 from uuid import UUID
@@ -181,6 +183,63 @@ _INSERT_DECISION = """
 """
 
 
+@router.get(
+    "/{episodio_id}/decision",
+    response_model=DecisionResponse,
+    tags=["Triages"],
+    summary="Consulta la decisión final registrada para un episodio",
+)
+def obtener_decision(
+    episodio_id: UUID,
+    usuario: Usuario = Depends(requiere_rol("enfermero")),
+    conn: psycopg.Connection = Depends(get_conn),
+):
+    with conn.cursor() as cur:
+        _verificar_usuario(cur, usuario)
+
+        cur.execute(
+            """
+            SELECT
+                dc.decision_id,
+                dc.episodio_id,
+                cia.nivel_esi_sugerido,
+                dc.nivel_esi_final,
+                dc.coincide_con_ia,
+                dc.justificacion,
+                dc.usuario_id,
+                dc.fecha_hora_decision
+            FROM decision_clinica dc
+            JOIN LATERAL (
+                SELECT nivel_esi_sugerido
+                FROM clasificacion_ia
+                WHERE episodio_id = dc.episodio_id
+                ORDER BY tiempo_respuesta DESC NULLS LAST
+                LIMIT 1
+            ) cia ON TRUE
+            WHERE dc.episodio_id = %(episodio_id)s
+            """,
+            {"episodio_id": episodio_id},
+        )
+        fila = cur.fetchone()
+
+    if not fila:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="El episodio no tiene una decisión registrada.",
+        )
+
+    return DecisionResponse(
+        decision_id=fila[0],
+        episodio_id=fila[1],
+        nivel_esi_sugerido=fila[2],
+        nivel_esi_final=fila[3],
+        coincide_con_ia=fila[4],
+        modificado_manualmente=not fila[4],
+        justificacion=fila[5],
+        usuario_id=fila[6],
+        fecha_hora_decision=fila[7],
+    )
+
 @router.post(
     "/{episodio_id}/decision",
     response_model=DecisionResponse,
@@ -275,6 +334,136 @@ def registrar_decision(
         fecha_hora_decision=fecha_decision,
     )
 
+@router.post(
+    "/{episodio_id}/decision/fallo",
+    status_code=status.HTTP_201_CREATED,
+    tags=["Triages"],
+    summary="Registra un fallo confirmado al guardar una decisión clínica",
+)
+def registrar_fallo_decision(
+    episodio_id: UUID,
+    data: DecisionInput,
+    usuario: Usuario = Depends(requiere_rol("enfermero")),
+    conn: psycopg.Connection = Depends(get_conn),
+):
+    with conn.transaction():
+        with conn.cursor() as cur:
+            _verificar_usuario(cur, usuario)
+
+            cur.execute(
+                "SELECT 1 FROM episodio_triage WHERE episodio_id = %(episodio_id)s",
+                {"episodio_id": episodio_id},
+            )
+            if not cur.fetchone():
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="No existe el episodio de triage.",
+                )
+
+            cur.execute(
+                _ULTIMA_SUGERENCIA_IA,
+                {"episodio_id": episodio_id},
+            )
+            sugerencia = cur.fetchone()
+
+            if not sugerencia:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="No existe una sugerencia de IA para el episodio.",
+                )
+
+            nivel_sugerido = sugerencia[0]
+            registro_id = uuid.uuid4()
+            evento_tipo = "triage.decision.guardar_fallido"
+            fecha_evento = datetime.now(timezone.utc).replace(tzinfo=None)
+
+            # Serializa la generación de hashes para mantener la cadena.
+            cur.execute(
+                "SELECT pg_advisory_xact_lock(hashtext('registro_auditoria'))"
+            )
+
+            cur.execute(
+                """
+                SELECT hash_actual
+                FROM registro_auditoria
+                ORDER BY fecha_hora_evento DESC, registro_id DESC
+                LIMIT 1
+                """
+            )
+            anterior = cur.fetchone()
+            hash_anterior = anterior[0] if anterior else "0" * 64
+
+            coincide = data.nivel_esi_final == nivel_sugerido
+
+            contenido = {
+                "registro_id": str(registro_id),
+                "episodio_id": str(episodio_id),
+                "evento_tipo": evento_tipo,
+                "usuario_id_actor": str(usuario.usuario_id),
+                "sugerencia_ia": nivel_sugerido,
+                "decision_final": data.nivel_esi_final,
+                "hay_discrepancia": not coincide,
+                "fecha_hora_evento": fecha_evento.isoformat(),
+            }
+
+            contenido_json = json.dumps(
+                contenido,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            hash_actual = hashlib.sha256(
+                (hash_anterior + contenido_json).encode("utf-8")
+            ).hexdigest()
+
+            cur.execute(
+                """
+                INSERT INTO registro_auditoria (
+                    registro_id,
+                    episodio_id,
+                    decision_id,
+                    evento_tipo,
+                    usuario_id_actor,
+                    sugerencia_ia,
+                    prompt_enviado,
+                    decision_final,
+                    hay_discrepancia,
+                    hash_anterior,
+                    hash_actual,
+                    fecha_hora_evento
+                )
+                VALUES (
+                    %(registro_id)s,
+                    %(episodio_id)s,
+                    NULL,
+                    %(evento_tipo)s,
+                    %(usuario_id_actor)s,
+                    %(sugerencia_ia)s,
+                    NULL,
+                    %(decision_final)s,
+                    %(hay_discrepancia)s,
+                    %(hash_anterior)s,
+                    %(hash_actual)s,
+                    %(fecha_hora_evento)s
+                )
+                """,
+                {
+                    "registro_id": registro_id,
+                    "episodio_id": episodio_id,
+                    "evento_tipo": evento_tipo,
+                    "usuario_id_actor": usuario.usuario_id,
+                    "sugerencia_ia": nivel_sugerido,
+                    "decision_final": data.nivel_esi_final,
+                    "hay_discrepancia": not coincide,
+                    "hash_anterior": hash_anterior,
+                    "hash_actual": hash_actual,
+                    "fecha_hora_evento": fecha_evento,
+                },
+            )
+
+    return {
+        "registro_id": str(registro_id),
+        "evento_tipo": evento_tipo,
+    }
 
 
 # --- Sugerencia ESI de la IA (S09-7) ----------------------------------------

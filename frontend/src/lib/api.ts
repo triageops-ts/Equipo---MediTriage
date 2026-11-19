@@ -14,6 +14,7 @@ export const RUTAS = {
   formulario: "/api/v1/triage/formulario",
   evaluar: (episodioId: string) => `/api/v1/triage/${episodioId}/evaluate`,
   decision: (episodioId: string) => `/api/v1/triage/${episodioId}/decision`,
+  decisionFallo: (episodioId: string) => `/api/v1/triage/${episodioId}/decision/fallo`,
   cola: "/api/v1/triage/cola",
   salaEspera: "/api/v1/sala-espera",
   auditLogs: "/api/v1/audit-logs",
@@ -332,6 +333,17 @@ export function registrarDecision(
   });
 }
 
+/** POST /triage/{episodio_id}/decision/fallo */
+export function registrarFalloDecision(
+  episodioId: string,
+  datos: DecisionInput,
+): Promise<{ registro_id: string; evento_tipo: string }> {
+  return pedir(RUTAS.decisionFallo(episodioId), {
+    method: "POST",
+    body: JSON.stringify(datos),
+  });
+}
+
 /** GET /triage/cola */
 export function obtenerCola(filtros: FiltrosCola = {}): Promise<ColaTriageItem[]> {
   return pedir(conQuery(RUTAS.cola, { ...filtros }));
@@ -345,4 +357,10 @@ export function obtenerSalaEspera(): Promise<SalaEsperaEntry[]> {
 /** GET /audit-logs */
 export function obtenerAuditLogs(filtros: FiltrosAuditoria = {}): Promise<AuditLogEntry[]> {
   return pedir(conQuery(RUTAS.auditLogs, { ...filtros }));
+}
+/** GET /triage/{episodio_id}/decision */
+export function obtenerDecision(
+  episodioId: string,
+): Promise<DecisionResponse> {
+  return pedir(RUTAS.decision(episodioId));
 }

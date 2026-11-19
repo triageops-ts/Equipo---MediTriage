@@ -11,13 +11,18 @@ import {
   ApiError,
   enviarFormulario,
   evaluarTriage,
+  registrarDecision,
+  registrarFalloDecision,
+  obtenerDecision,
   type ClasificacionIA,
+  type DecisionInput,
+  type DecisionResponse,
   type ErrorCampo,
-  type EsiLevel,
   type FormularioClinicoRespuesta,
   type NivelConciencia,
   type PacienteEncontrado,
   type SeveridadSintoma,
+  type EsiLevel,
 } from "@/lib/api";
 
 interface SintomaForm {
@@ -56,18 +61,6 @@ const FORM_VACIO: FormState = {
 
 const MAX_MOTIVO = 1000;
 
-// El backend entrega el nivel ESI; la etiqueta de gravedad es solo su nombre en pantalla.
-const GRAVEDAD_POR_ESI: Record<EsiLevel, string> = {
-  1: "RESUCITACIÓN",
-  2: "EMERGENCIA",
-  3: "URGENCIA",
-  4: "URGENCIA MENOR",
-  5: "NO URGENTE",
-};
-
-const AVISO_FALLBACK =
-  "Sugerencia por reglas: la IA no respondió a tiempo.";
-
 const aNumero = (texto: string): number =>
   texto.trim() === "" ? NaN : Number(texto);
 
@@ -82,39 +75,58 @@ export default function NurseTriagePage() {
   const [resultado, setResultado] =
     useState<FormularioClinicoRespuesta | null>(null);
 
-  // Solo guardamos el id del episodio (UUID, no identifica al paciente) y lo que
-  // respondió el backend. Nada de esto contiene RUT, nombre ni datos clínicos.
-  const [episodioId, setEpisodioId] = useState<string | null>(null);
-  const [clasificacion, setClasificacion] = useState<ClasificacionIA | null>(
-    null
-  );
-  const [isLoading, setIsLoading] = useState(false);
-  const [errorIA, setErrorIA] = useState<string | null>(null);
+  const [recommendation, setRecommendation] = useState<{
+    esi: EsiLevel | null;
+    gravedad: string;
+    justificacion: string[];
+  }>({
+    esi: null,
+    gravedad: "",
+    justificacion: [
+      "Registre el ingreso y pulse Actualizar para solicitar la evaluación.",
+    ],
+  });
 
-  // Borra todo lo que identifica al paciente: formulario, paciente elegido y el buscador.
-  // No toca `resultado`, que solo tiene el id del episodio y su estado.
+  const [clasificacion, setClasificacion] =
+    useState<ClasificacionIA | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const [decisionLoading, setDecisionLoading] = useState(false);
+  const [decisionGuardada, setDecisionGuardada] = useState(false);
+  const [decisionError, setDecisionError] = useState<string | null>(null);
+  const [decisionMensaje, setDecisionMensaje] = useState<string | null>(null);
+  const [decisionPendiente, setDecisionPendiente] =
+    useState<DecisionInput | null>(null);
+
+  const limpiarEstadoDecision = useCallback(() => {
+    setDecisionLoading(false);
+    setDecisionGuardada(false);
+    setDecisionError(null);
+    setDecisionMensaje(null);
+    setDecisionPendiente(null);
+  }, []);
+
   const limpiarDatosPersonales = useCallback(() => {
     setFormData(FORM_VACIO);
     setPaciente(null);
-    setClaveFormulario((k) => k + 1); // vacía el buscador (RUT, nombre y nacimiento)
+    setClaveFormulario((k) => k + 1);
   }, []);
 
-  // Con el botón "Atrás" el navegador puede restaurar la página tal como estaba (bfcache),
-  // con el paciente anterior en pantalla. En ese caso se borra todo.
   useEffect(() => {
     const alMostrar = (e: PageTransitionEvent) => {
       if (!e.persisted) return;
+
       limpiarDatosPersonales();
+      limpiarEstadoDecision();
       setResultado(null);
-      setEpisodioId(null);
-      setClasificacion(null);
-      setErrorIA(null);
       setError(null);
       setErroresCampo([]);
     };
+
     window.addEventListener("pageshow", alMostrar);
+
     return () => window.removeEventListener("pageshow", alMostrar);
-  }, [limpiarDatosPersonales]);
+  }, [limpiarDatosPersonales, limpiarEstadoDecision]);
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
@@ -158,24 +170,237 @@ export default function NurseTriagePage() {
   };
 
   const handleUpdateTriage = async () => {
-    if (!episodioId) {
-      setErrorIA("Registre el ingreso del paciente antes de pedir la evaluación.");
+    const episodioId = resultado?.episodio_id;
+
+    if (!episodioId || isLoading || decisionGuardada) {
+      setError("Primero registre el ingreso clínico del paciente.");
       return;
     }
 
     setIsLoading(true);
-    setErrorIA(null);
+    setError(null);
+    setClasificacion(null);
+    setRecommendation({
+      esi: null,
+      gravedad: "",
+      justificacion: ["Solicitando evaluación al servicio clínico..."],
+    });
 
     try {
-      setClasificacion(await evaluarTriage(episodioId));
-    } catch (e) {
-      setErrorIA(
+      const evaluacion = await evaluarTriage(episodioId);
+
+      if (evaluacion.episodio_id !== episodioId) {
+        throw new Error(
+          "La evaluación recibida no corresponde al episodio actual."
+        );
+      }
+
+      setClasificacion(evaluacion);
+
+      const nivel = evaluacion.nivel_esi_sugerido;
+      const gravedadPorNivel: Record<EsiLevel, string> = {
+        1: "RESUCITACIÓN",
+        2: "EMERGENCIA",
+        3: "URGENCIA",
+        4: "URGENCIA MENOR",
+        5: "NO URGENTE",
+      };
+
+      setRecommendation({
+        esi: nivel,
+        gravedad: gravedadPorNivel[nivel],
+        justificacion: evaluacion.justificacion_ia
+          .split("\n")
+          .map((linea) => linea.trim())
+          .filter(Boolean),
+      });
+    } catch (e: unknown) {
+      setClasificacion(null);
+      setRecommendation({
+        esi: null,
+        gravedad: "",
+        justificacion: [
+          "No se obtuvo una evaluación válida. Puede volver a intentarlo.",
+        ],
+      });
+
+      setError(
         e instanceof ApiError
           ? e.message
-          : "No se pudo obtener la evaluación. Intente nuevamente."
+          : e instanceof Error
+            ? e.message
+            : "No se pudo realizar la evaluación clínica."
       );
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const aplicarDecisionGuardada = (decision: DecisionResponse) => {
+    setDecisionGuardada(true);
+    setDecisionPendiente(null);
+    setDecisionError(null);
+
+    setDecisionMensaje(
+      decision.modificado_manualmente
+        ? `Decisión guardada: ESI ${decision.nivel_esi_final}. Motivo registrado.`
+        : `Decisión confirmada y guardada: ESI ${decision.nivel_esi_final}.`
+    );
+  };
+
+  const verificarDecision = async (
+    id: string,
+    pendiente: DecisionInput
+  ): Promise<"guardada" | "no_guardada" | "error" | "conflicto"> => {
+    try {
+      const existente = await obtenerDecision(id);
+
+      const coincide =
+        existente.episodio_id === id &&
+        existente.nivel_esi_final === pendiente.nivel_esi_final &&
+        (existente.justificacion ?? "").trim() ===
+          (pendiente.justificacion ?? "").trim();
+
+      if (coincide) {
+        aplicarDecisionGuardada(existente);
+        return "guardada";
+      }
+
+      setDecisionError(
+        "El episodio ya tiene una decisión registrada diferente. No se volverá a enviar."
+      );
+      setDecisionPendiente(null);
+
+      return "conflicto";
+    } catch (e: unknown) {
+      if (e instanceof ApiError && e.status === 404) {
+        return "no_guardada";
+      }
+
+      return "error";
+    }
+  };
+
+  const handleGuardarDecision = async (
+    nivel: EsiLevel,
+    justificacion: string
+  ) => {
+    const id = resultado?.episodio_id;
+    const evaluacion = clasificacion;
+
+    if (!id || !evaluacion || evaluacion.episodio_id !== id) {
+      setDecisionError(
+        "Debe obtener una evaluación clínica válida antes de registrar la decisión."
+      );
+      return;
+    }
+
+    if (decisionLoading || decisionGuardada) return;
+
+    const cambiaNivel = nivel !== evaluacion.nivel_esi_sugerido;
+    const motivo = justificacion.trim();
+
+    if (cambiaNivel && motivo.length < 10) {
+      setDecisionError(
+        "La modificación del nivel ESI requiere una justificación de al menos 10 caracteres."
+      );
+      return;
+    }
+
+    const pendiente: DecisionInput = {
+      nivel_esi_final: nivel,
+      ...(cambiaNivel ? { justificacion: motivo } : {}),
+    };
+
+    setDecisionPendiente(pendiente);
+    setDecisionError(null);
+    setDecisionMensaje(null);
+    setDecisionLoading(true);
+
+    try {
+      const respuesta = await registrarDecision(id, pendiente);
+      aplicarDecisionGuardada(respuesta);
+    } catch (e: unknown) {
+      const estado = await verificarDecision(id, pendiente);
+
+      if (estado === "guardada" || estado === "conflicto") {
+        return;
+      }
+
+      if (estado === "no_guardada") {
+        try {
+          await registrarFalloDecision(id, pendiente);
+        } catch {
+          // La auditoría no debe impedir mostrar el error ni ofrecer reintento.
+        }
+
+        setDecisionError(
+          e instanceof ApiError
+            ? e.message
+            : "No se pudo confirmar el guardado. Use Reintentar guardado."
+        );
+      } else {
+        setDecisionError(
+          "No se pudo verificar si la decisión quedó registrada. Use Reintentar guardado antes de volver a enviarla."
+        );
+      }
+    } finally {
+      setDecisionLoading(false);
+    }
+  };
+
+  const handleReintentarDecision = async () => {
+    const id = resultado?.episodio_id;
+    const pendiente = decisionPendiente;
+
+    if (!id || !pendiente || decisionLoading || decisionGuardada) {
+      return;
+    }
+
+    const episodioId = id;
+
+    setDecisionLoading(true);
+    setDecisionError(null);
+    setDecisionMensaje(null);
+
+    try {
+      const estado = await verificarDecision(episodioId, pendiente);
+
+      if (estado === "guardada" || estado === "conflicto") {
+        return;
+      }
+
+      if (estado === "error") {
+        setDecisionError(
+          "No se pudo verificar si la decisión quedó guardada. No se repetirá el envío para evitar duplicados."
+        );
+        return;
+      }
+
+      const respuesta = await registrarDecision(episodioId, pendiente);
+      aplicarDecisionGuardada(respuesta);
+    } catch (e: unknown) {
+      const estado = await verificarDecision(episodioId, pendiente);
+
+      if (estado === "no_guardada") {
+        try {
+          await registrarFalloDecision(episodioId, pendiente);
+        } catch {
+          // La auditoría no debe bloquear el flujo de reintento.
+        }
+      }
+
+      if (estado !== "guardada" && estado !== "conflicto") {
+        setDecisionError(
+          e instanceof ApiError
+            ? e.message
+            : e instanceof Error
+              ? e.message
+              : "No se pudo guardar la decisión. Intente nuevamente."
+        );
+      }
+    } finally {
+      setDecisionLoading(false);
     }
   };
 
@@ -214,7 +439,6 @@ export default function NurseTriagePage() {
       return;
     }
 
-    // Validación de los síntomas estructurados.
     for (let i = 0; i < formData.sintomas.length; i++) {
       const sintoma = formData.sintomas[i];
 
@@ -235,7 +459,6 @@ export default function NurseTriagePage() {
       }
     }
 
-    // Las alergias y la anamnesis se conservan en motivo_consulta.
     const partes: string[] = [];
 
     if (formData.anamnesis.trim()) {
@@ -255,7 +478,6 @@ export default function NurseTriagePage() {
       return;
     }
 
-    // Conversión al formato esperado por el backend.
     const sintomas = formData.sintomas.map((sintoma) => ({
       codigo_sintoma: sintoma.codigo_sintoma.trim(),
       severidad: sintoma.severidad,
@@ -283,11 +505,18 @@ export default function NurseTriagePage() {
       });
 
       setResultado(respuesta);
-      setEpisodioId(respuesta.episodio_id);
       setClasificacion(null);
-      setErrorIA(null);
-      limpiarDatosPersonales(); // ya quedó guardado en el servidor: no hace falta tenerlo en el navegador
-    } catch (e) {
+      setRecommendation({
+        esi: null,
+        gravedad: "",
+        justificacion: [
+          "Ingreso registrado. Pulse Actualizar para solicitar la evaluación clínica.",
+        ],
+      });
+
+      limpiarEstadoDecision();
+      limpiarDatosPersonales();
+    } catch (e: unknown) {
       if (e instanceof ApiError) {
         setError(
           e.errores.length > 0
@@ -296,22 +525,32 @@ export default function NurseTriagePage() {
         );
         setErroresCampo(e.errores);
       } else {
-        setError("Error inesperado al enviar el formulario.");
+        setError(
+          e instanceof Error
+            ? e.message
+            : "Error inesperado al enviar el formulario."
+        );
       }
     } finally {
       setEnviando(false);
     }
   };
 
-const handleNuevoIngreso = () => {
-  limpiarDatosPersonales();
-  setResultado(null);
-  setEpisodioId(null);
-  setClasificacion(null);
-  setErrorIA(null);
-  setError(null);
-  setErroresCampo([]);
-};
+  const handleNuevoIngreso = () => {
+    limpiarDatosPersonales();
+    limpiarEstadoDecision();
+    setResultado(null);
+    setClasificacion(null);
+
+    setRecommendation({
+      esi: null,
+      gravedad: "",
+      justificacion: ["Registre un ingreso para comenzar."],
+    });
+
+    setError(null);
+    setErroresCampo([]);
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-800">
@@ -362,7 +601,6 @@ const handleNuevoIngreso = () => {
             }
           />
 
-          {/* Captura estructurada de síntomas */}
           <section className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -416,6 +654,7 @@ const handleNuevoIngreso = () => {
                         >
                           Código del síntoma
                         </label>
+
                         <input
                           id={`codigo-sintoma-${index}`}
                           type="text"
@@ -439,6 +678,7 @@ const handleNuevoIngreso = () => {
                         >
                           Severidad
                         </label>
+
                         <select
                           id={`severidad-${index}`}
                           value={sintoma.severidad}
@@ -464,6 +704,7 @@ const handleNuevoIngreso = () => {
                         >
                           Evolución (horas)
                         </label>
+
                         <input
                           id={`evolucion-${index}`}
                           type="number"
@@ -488,7 +729,6 @@ const handleNuevoIngreso = () => {
             )}
           </section>
 
-          {/* Envío al backend */}
           <div className="space-y-3">
             {error && (
               <div
@@ -540,20 +780,35 @@ const handleNuevoIngreso = () => {
 
         <section className="lg:col-span-4 h-full">
           <AIAssistantCard
-            esi={clasificacion?.nivel_esi_sugerido ?? null}
-            gravedad={
-              clasificacion
-                ? GRAVEDAD_POR_ESI[clasificacion.nivel_esi_sugerido]
+            key={
+              clasificacion?.clasificacion_id ??
+              resultado?.episodio_id ??
+              "sin-episodio"
+            }
+            esi={recommendation.esi}
+            evaluacionReal={Boolean(
+              clasificacion &&
+                clasificacion.episodio_id === resultado?.episodio_id
+            )}
+            avisoFallback={
+              clasificacion?.fallback_aplicado
+                ? "La IA no estuvo disponible. Se utilizó el mecanismo de respaldo basado en reglas; esta evaluación no fue generada por el modelo de IA."
                 : null
             }
-            justificacion={clasificacion?.justificacion_ia ?? null}
-            avisoFallback={
-              clasificacion?.fallback_aplicado ? AVISO_FALLBACK : null
-            }
-            error={errorIA}
-            sinEpisodio={episodioId === null}
+            error={error}
+            gravedad={recommendation.gravedad}
+            justificacion={recommendation.justificacion.join(" ")}
             onUpdate={handleUpdateTriage}
             isLoading={isLoading}
+            sinEpisodio={!resultado?.episodio_id}
+            onConfirm={handleGuardarDecision}
+            onManualDecision={handleGuardarDecision}
+            onRetryDecision={handleReintentarDecision}
+            decisionLoading={decisionLoading}
+            decisionGuardada={decisionGuardada}
+            decisionError={decisionError}
+            decisionMensaje={decisionMensaje}
+            decisionPendiente={decisionPendiente !== null}
           />
         </section>
       </main>
