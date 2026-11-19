@@ -182,7 +182,7 @@ async def http_error_handler(request: Request, exc: StarletteHTTPException):
     if exc.status_code == 422:
         logger.warning(
             "validation_failed",
-            extra={"fields": ["rut"], "error_types": ["value_error"]},
+            extra={"error_types": ["value_error"]},
         )
     else:
         logger.warning("http_error", extra={"status": exc.status_code})
