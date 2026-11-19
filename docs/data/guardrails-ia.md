@@ -67,7 +67,8 @@ o de cobertura de salud"), para que el prompt completo pase la misma verificaci�
   que un caso corrido 3 veces dé lo mismo y que el prompt no lleve variables prohibidas.
 - `python scripts/verificar_casos_limite.py` (desde `backend/`, con `ANTHROPIC_API_KEY`): corre los 10 casos
   3 veces cada uno contra Claude real, informa subclasificación e inconsistencia y guarda
-  `casos_limite_resultado.json` como evidencia. Hace 30 llamadas.
+  `casos_limite_resultado.json` como evidencia. Hace 30 llamadas. Una respuesta del respaldo de reglas se marca
+  `SIN IA` (no prueba nada sobre Claude) y muestra el motivo; si hay alguna, el script termina con código 3.
 
 ## Límites conocidos
 
