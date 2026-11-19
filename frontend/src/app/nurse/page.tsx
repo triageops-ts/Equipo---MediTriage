@@ -97,6 +97,8 @@ export default function NurseTriagePage() {
   const [decisionMensaje, setDecisionMensaje] = useState<string | null>(null);
   const [decisionPendiente, setDecisionPendiente] =
     useState<DecisionInput | null>(null);
+  const [decisionResultado, setDecisionResultado] =
+    useState<DecisionResponse | null>(null);
 
   const limpiarEstadoDecision = useCallback(() => {
     setDecisionLoading(false);
@@ -104,6 +106,7 @@ export default function NurseTriagePage() {
     setDecisionError(null);
     setDecisionMensaje(null);
     setDecisionPendiente(null);
+    setDecisionResultado(null);
   }, []);
 
   const limpiarDatosPersonales = useCallback(() => {
@@ -179,6 +182,7 @@ export default function NurseTriagePage() {
 
     setIsLoading(true);
     setError(null);
+    setDecisionError(null);
     setClasificacion(null);
     setRecommendation({
       esi: null,
@@ -240,11 +244,13 @@ export default function NurseTriagePage() {
     setDecisionGuardada(true);
     setDecisionPendiente(null);
     setDecisionError(null);
+    setDecisionResultado(decision);
 
+    // modificado_manualmente / coincide_con_ia vienen del backend (US-02, escenario verde).
     setDecisionMensaje(
       decision.modificado_manualmente
-        ? `Decisión guardada: ESI ${decision.nivel_esi_final}. Motivo registrado.`
-        : `Decisión confirmada y guardada: ESI ${decision.nivel_esi_final}.`
+        ? `Decisión guardada: ESI ${decision.nivel_esi_final}. El motivo del cambio quedó registrado.`
+        : `Decisión guardada: ESI ${decision.nivel_esi_final} confirmado.`
     );
   };
 
@@ -267,7 +273,7 @@ export default function NurseTriagePage() {
       }
 
       setDecisionError(
-        "El episodio ya tiene una decisión registrada diferente. No se volverá a enviar."
+        "Este episodio ya tiene una decisión registrada y no puede reemplazarse. No se volverá a enviar."
       );
       setDecisionPendiente(null);
 
@@ -278,6 +284,68 @@ export default function NurseTriagePage() {
       }
 
       return "error";
+    }
+  };
+
+  // Traduce el fallo de POST /decision a un mensaje claro (US-02):
+  //  404 episodio inexistente, 409 ya decidido o sin sugerencia de IA, 422 falta el motivo.
+  // Esos tres son rechazos definitivos del backend: reintentar no los arregla, así que se
+  // quita el estado "pendiente" y no se ofrece "Reintentar guardado". Cualquier otro fallo
+  // (conexión, 5xx) conserva el flujo de verificación y reintento de S07-11.
+  const manejarErrorDecision = async (
+    e: unknown,
+    id: string,
+    pendiente: DecisionInput
+  ) => {
+    if (e instanceof ApiError && e.status === 404) {
+      setDecisionPendiente(null);
+      setDecisionError(
+        "El episodio no existe. Registre el ingreso del paciente nuevamente."
+      );
+      return;
+    }
+
+    if (e instanceof ApiError && e.status === 422) {
+      setDecisionPendiente(null);
+      setDecisionError(
+        "Falta el motivo: para cambiar el nivel sugerido por la IA escriba una justificación de al menos 10 caracteres."
+      );
+      return;
+    }
+
+    // Antes de dar el fallo por bueno se comprueba si la decisión quedó guardada igual.
+    const estado = await verificarDecision(id, pendiente);
+
+    if (estado === "guardada" || estado === "conflicto") {
+      return;
+    }
+
+    if (e instanceof ApiError && e.status === 409) {
+      setDecisionPendiente(null);
+      setDecisionError(
+        estado === "no_guardada"
+          ? "Este episodio aún no tiene una sugerencia de la IA. Pulse Actualizar para obtenerla y luego confirme o modifique el nivel."
+          : "El servidor rechazó la decisión (conflicto) y no se pudo verificar su estado. Pulse Actualizar y vuelva a intentarlo."
+      );
+      return;
+    }
+
+    if (estado === "no_guardada") {
+      try {
+        await registrarFalloDecision(id, pendiente);
+      } catch {
+        // La auditoría no debe impedir mostrar el error ni ofrecer reintento.
+      }
+
+      setDecisionError(
+        e instanceof ApiError
+          ? e.message
+          : "No se pudo confirmar el guardado. Use Reintentar guardado."
+      );
+    } else {
+      setDecisionError(
+        "No se pudo verificar si la decisión quedó registrada. Use Reintentar guardado antes de volver a enviarla."
+      );
     }
   };
 
@@ -321,29 +389,7 @@ export default function NurseTriagePage() {
       const respuesta = await registrarDecision(id, pendiente);
       aplicarDecisionGuardada(respuesta);
     } catch (e: unknown) {
-      const estado = await verificarDecision(id, pendiente);
-
-      if (estado === "guardada" || estado === "conflicto") {
-        return;
-      }
-
-      if (estado === "no_guardada") {
-        try {
-          await registrarFalloDecision(id, pendiente);
-        } catch {
-          // La auditoría no debe impedir mostrar el error ni ofrecer reintento.
-        }
-
-        setDecisionError(
-          e instanceof ApiError
-            ? e.message
-            : "No se pudo confirmar el guardado. Use Reintentar guardado."
-        );
-      } else {
-        setDecisionError(
-          "No se pudo verificar si la decisión quedó registrada. Use Reintentar guardado antes de volver a enviarla."
-        );
-      }
+      await manejarErrorDecision(e, id, pendiente);
     } finally {
       setDecisionLoading(false);
     }
@@ -380,25 +426,7 @@ export default function NurseTriagePage() {
       const respuesta = await registrarDecision(episodioId, pendiente);
       aplicarDecisionGuardada(respuesta);
     } catch (e: unknown) {
-      const estado = await verificarDecision(episodioId, pendiente);
-
-      if (estado === "no_guardada") {
-        try {
-          await registrarFalloDecision(episodioId, pendiente);
-        } catch {
-          // La auditoría no debe bloquear el flujo de reintento.
-        }
-      }
-
-      if (estado !== "guardada" && estado !== "conflicto") {
-        setDecisionError(
-          e instanceof ApiError
-            ? e.message
-            : e instanceof Error
-              ? e.message
-              : "No se pudo guardar la decisión. Intente nuevamente."
-        );
-      }
+      await manejarErrorDecision(e, episodioId, pendiente);
     } finally {
       setDecisionLoading(false);
     }
@@ -808,6 +836,7 @@ export default function NurseTriagePage() {
             decisionGuardada={decisionGuardada}
             decisionError={decisionError}
             decisionMensaje={decisionMensaje}
+            decisionResultado={decisionResultado}
             decisionPendiente={decisionPendiente !== null}
           />
         </section>
