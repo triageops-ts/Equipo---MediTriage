@@ -1,4 +1,4 @@
-﻿"""Registro persistente de fallos al guardar decisiones clínicas.
+"""Registro persistente de fallos al guardar decisiones clínicas.
 
 Revision ID: 0010
 Revises: 0009
@@ -15,6 +15,50 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # Preservar una tabla legacy incompatible que puede existir
+    # en bases de datos anteriores a esta migración.
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+
+    if inspector.has_table("registro_auditoria", schema="public"):
+        columnas = {
+            columna["name"]
+            for columna in inspector.get_columns(
+                "registro_auditoria",
+                schema="public",
+            )
+        }
+
+        columnas_nuevas = {
+            "episodio_id",
+            "decision_id",
+            "usuario_id_actor",
+            "sugerencia_ia",
+            "prompt_enviado",
+            "decision_final",
+            "hay_discrepancia",
+        }
+
+        if not columnas_nuevas.issubset(columnas):
+            if inspector.has_table(
+                "registro_auditoria_legacy",
+                schema="public",
+            ):
+                raise RuntimeError(
+                    "Ya existe registro_auditoria_legacy; "
+                    "se cancela para evitar sobrescribir datos."
+                )
+
+            op.execute(
+                "ALTER TABLE public.registro_auditoria "
+                "RENAME TO registro_auditoria_legacy"
+            )
+            op.execute(
+                "ALTER TABLE public.registro_auditoria_legacy "
+                "RENAME CONSTRAINT registro_auditoria_pkey "
+                "TO registro_auditoria_legacy_pkey"
+            )
+
     op.create_table(
         "registro_auditoria",
         sa.Column("registro_id", sa.UUID(), nullable=False),
