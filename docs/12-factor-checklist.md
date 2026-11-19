@@ -26,7 +26,7 @@
 | *11 Logs* | Agregación de logs | No cumple | Agregar al C4 L2 un sistema externo tipo Loki + Grafana o CloudWatch Logs, y definirlo en el ADR. | Isidora Ramos (DevSecOps) |
 | *11 Logs* | PII enmascarada | No cumple | Implementar middleware de sanitización de logs, separado del audit log en Postgres. | Lucas Benítez (Jefe técnico) |
 | *11 Logs* | Audit Log separado | Cumple | Registro de negocio separado del log técnico en Postgres. | - |
-| *12 Admin Processes* | Herramienta de migraciones | No cumple | Adoptar Alembic, versionado en el mismo repositorio que el backend. | Lucas Benítez (Jefe técnico) |
+| *12 Admin Processes* | Herramienta de migraciones | Cumple | Adoptar Alembic, versionado en el mismo repositorio que el backend. | Lucas Benítez (Jefe técnico) |
 | *12 Admin Processes* | Migraciones en release | No cumple | Definir un job en CI/CD que corra `alembic upgrade head` usando la imagen Docker del backend. | Isidora Ramos (DevSecOps) |
-| *12 Admin Processes* | Tareas admin puntuales | No cumple | Crear comandos CLI dentro del backend (ej. `python -m app.cli seed-roles`) invocables como contenedor one-off. | Lucas Benítez (Jefe técnico) |
+| *12 Admin Processes* | Tareas admin puntuales | Cumple | Crear comandos CLI dentro del backend (ej. `python -m app.cli seed-roles`) invocables como contenedor one-off. | Lucas Benítez (Jefe técnico) |
 | *12 Admin Processes* | Representación en C4 / ADR | No cumple | Agregar nota o componente en el diagrama C4 L2 / ADR. | - |

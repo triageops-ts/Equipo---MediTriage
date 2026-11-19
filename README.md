@@ -387,3 +387,35 @@ Documentos relacionados:
 - Configuración de gitleaks: [`.gitleaks.toml`](.gitleaks.toml)
 - SBOM del último run: artefacto `sbom` en [las ejecuciones de `security.yml`](https://github.com/triageops-ts/Equipo---MediTriage/actions/workflows/security.yml)
 
+
+## Factor 12: Procesos administrativos
+
+### Migraciones de base de datos
+
+Las migraciones se ejecutan antes del despliegue del backend mediante un Job de Kubernetes que utiliza la imagen del backend.
+
+El comando ejecutado es `alembic upgrade head`.
+
+Requiere la variable MIGRATION_DATABASE_URL, configurada mediante un Secret de Kubernetes.
+
+### Tareas administrativas puntuales
+
+Los comandos se ejecutan como contenedores puntuales, reutilizando la imagen del backend. No es necesario iniciar el servidor API.
+
+**Sembrar usuarios y roles:**
+
+```powershell
+docker run --rm --env-file .env.factor12 ghcr.io/triageops-ts/meditriage-backend:TAG python -m app.cli seed-roles
+```
+
+**Sembrar pacientes y consentimientos sintéticos:**
+
+```powershell
+docker run --rm --env-file .env.factor12 ghcr.io/triageops-ts/meditriage-backend:TAG python -m app.cli seed-demo
+```
+
+El archivo .env.factor12 debe proporcionar SEED_DATABASE_URL, APP_ENCRYPTION_KEY, APP_RUT_HASH_KEY y DEMO_PASSWORD.
+
+Reemplazar TAG por la etiqueta de la imagen publicada. La base de datos debe estar migrada antes de ejecutar los comandos y las credenciales deben tener los permisos administrativos necesarios.
+
+No subir .env.factor12 al repositorio porque contiene credenciales.
