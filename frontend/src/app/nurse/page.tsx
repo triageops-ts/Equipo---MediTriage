@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Navbar } from "@/components/clinical/Navbar";
 import { VitalSignsCard } from "@/components/clinical/VitalSignsCard";
 import { AIAssistantCard } from "@/components/clinical/AIAssistantCard";
@@ -24,6 +24,16 @@ import {
   type SeveridadSintoma,
   type EsiLevel,
 } from "@/lib/api";
+import {
+  borrarDecisionRespaldada,
+  leerDecisionRespaldada,
+  marcarFalloRegistrado,
+  respaldarDecision,
+} from "@/lib/decisionPendiente";
+
+// S07-11: se agrega a los mensajes de error cuando la decisión queda pendiente de guardar.
+const AVISO_RESPALDO =
+  "La decisión quedó respaldada en este navegador y se reintentará sola al volver la conexión.";
 
 interface SintomaForm {
   codigo_sintoma: string;
@@ -100,14 +110,39 @@ export default function NurseTriagePage() {
   const [decisionResultado, setDecisionResultado] =
     useState<DecisionResponse | null>(null);
 
+  // S07-11: indica si el fallo de la decisión pendiente ya quedó en la auditoría.
+  // Es un ref (no estado) para que los handlers lean siempre el valor actual.
+  const falloRegistradoRef = useRef(false);
+  // S07-11: episodio al que pertenece la decisión pendiente. Puede no ser el de la pantalla
+  // (por ejemplo, después de recargar la página o de pulsar "Nuevo ingreso").
+  const [episodioPendiente, setEpisodioPendiente] = useState<string | null>(null);
+
+  // S07-11: recupera la decisión respaldada en el navegador, si la hay, para reintentarla.
+  const restaurarRespaldo = useCallback(() => {
+    const respaldo = leerDecisionRespaldada();
+    if (!respaldo) return;
+
+    setEpisodioPendiente(respaldo.episodio_id);
+    setDecisionPendiente(respaldo.decision);
+    falloRegistradoRef.current = respaldo.fallo_registrado;
+    setDecisionError(
+      `Hay una decisión sin guardar del episodio ${respaldo.episodio_id.slice(0, 8)} (ESI ${respaldo.decision.nivel_esi_final}). Quedó respaldada en este navegador: pulse "Reintentar guardado".`
+    );
+  }, []);
+
+  // Limpia la pantalla, pero una decisión que aún no se guarda no se pierde: se vuelve a
+  // cargar desde el respaldo del navegador.
   const limpiarEstadoDecision = useCallback(() => {
     setDecisionLoading(false);
     setDecisionGuardada(false);
     setDecisionError(null);
     setDecisionMensaje(null);
     setDecisionPendiente(null);
+    setEpisodioPendiente(null);
     setDecisionResultado(null);
-  }, []);
+    falloRegistradoRef.current = false;
+    restaurarRespaldo();
+  }, [restaurarRespaldo]);
 
   const limpiarDatosPersonales = useCallback(() => {
     setFormData(FORM_VACIO);
@@ -240,10 +275,28 @@ export default function NurseTriagePage() {
     }
   };
 
-  const aplicarDecisionGuardada = (decision: DecisionResponse) => {
-    setDecisionGuardada(true);
+  // S07-11: la decisión ya no está pendiente (se guardó o el backend la rechazó de forma
+  // definitiva): se quita de la pantalla y del respaldo del navegador.
+  const descartarPendiente = () => {
     setDecisionPendiente(null);
+    setEpisodioPendiente(null);
+    borrarDecisionRespaldada();
+  };
+
+  const aplicarDecisionGuardada = (decision: DecisionResponse) => {
+    descartarPendiente();
     setDecisionError(null);
+
+    // S07-11: era una decisión respaldada de otro episodio (p. ej. tras recargar la página).
+    // Se informa, pero no se marca como guardada la pantalla del paciente actual.
+    if (decision.episodio_id !== resultado?.episodio_id) {
+      setDecisionMensaje(
+        `Se guardó la decisión pendiente del episodio ${decision.episodio_id.slice(0, 8)}: ESI ${decision.nivel_esi_final}.`
+      );
+      return;
+    }
+
+    setDecisionGuardada(true);
     setDecisionResultado(decision);
 
     // modificado_manualmente / coincide_con_ia vienen del backend (US-02, escenario verde).
@@ -275,7 +328,7 @@ export default function NurseTriagePage() {
       setDecisionError(
         "Este episodio ya tiene una decisión registrada y no puede reemplazarse. No se volverá a enviar."
       );
-      setDecisionPendiente(null);
+      descartarPendiente();
 
       return "conflicto";
     } catch (e: unknown) {
@@ -284,6 +337,19 @@ export default function NurseTriagePage() {
       }
 
       return "error";
+    }
+  };
+
+  // S07-11: registra el fallo en la auditoría una sola vez por decisión pendiente.
+  // Si no hay conexión, queda marcado como pendiente y se reintenta junto con el guardado.
+  const registrarFalloSiFalta = async (id: string, pendiente: DecisionInput) => {
+    if (falloRegistradoRef.current) return;
+    try {
+      await registrarFalloDecision(id, pendiente);
+      falloRegistradoRef.current = true;
+      marcarFalloRegistrado(id);
+    } catch {
+      // Sin conexión: se volverá a intentar en "Reintentar guardado".
     }
   };
 
@@ -298,7 +364,7 @@ export default function NurseTriagePage() {
     pendiente: DecisionInput
   ) => {
     if (e instanceof ApiError && e.status === 404) {
-      setDecisionPendiente(null);
+      descartarPendiente();
       setDecisionError(
         "El episodio no existe. Registre el ingreso del paciente nuevamente."
       );
@@ -306,7 +372,7 @@ export default function NurseTriagePage() {
     }
 
     if (e instanceof ApiError && e.status === 422) {
-      setDecisionPendiente(null);
+      descartarPendiente();
       setDecisionError(
         "Falta el motivo: para cambiar el nivel sugerido por la IA escriba una justificación de al menos 10 caracteres."
       );
@@ -321,7 +387,7 @@ export default function NurseTriagePage() {
     }
 
     if (e instanceof ApiError && e.status === 409) {
-      setDecisionPendiente(null);
+      descartarPendiente();
       setDecisionError(
         estado === "no_guardada"
           ? "Este episodio aún no tiene una sugerencia de la IA. Pulse Actualizar para obtenerla y luego confirme o modifique el nivel."
@@ -331,20 +397,19 @@ export default function NurseTriagePage() {
     }
 
     if (estado === "no_guardada") {
-      try {
-        await registrarFalloDecision(id, pendiente);
-      } catch {
-        // La auditoría no debe impedir mostrar el error ni ofrecer reintento.
-      }
+      // La auditoría no debe impedir mostrar el error ni ofrecer reintento.
+      await registrarFalloSiFalta(id, pendiente);
 
       setDecisionError(
-        e instanceof ApiError
-          ? e.message
-          : "No se pudo confirmar el guardado. Use Reintentar guardado."
+        `${
+          e instanceof ApiError
+            ? e.message
+            : "No se pudo confirmar el guardado."
+        } ${AVISO_RESPALDO}`
       );
     } else {
       setDecisionError(
-        "No se pudo verificar si la decisión quedó registrada. Use Reintentar guardado antes de volver a enviarla."
+        `No se pudo verificar si la decisión quedó registrada. ${AVISO_RESPALDO}`
       );
     }
   };
@@ -380,7 +445,17 @@ export default function NurseTriagePage() {
       ...(cambiaNivel ? { justificacion: motivo } : {}),
     };
 
+    // S07-11: se respalda en el navegador ANTES de enviar: si la conexión se cae (o se
+    // cierra la página a mitad del envío) la decisión de la enfermera no se pierde.
     setDecisionPendiente(pendiente);
+    setEpisodioPendiente(id);
+    falloRegistradoRef.current = false;
+    respaldarDecision({
+      episodio_id: id,
+      decision: pendiente,
+      fallo_registrado: false,
+      respaldada_en: Date.now(),
+    });
     setDecisionError(null);
     setDecisionMensaje(null);
     setDecisionLoading(true);
@@ -396,7 +471,8 @@ export default function NurseTriagePage() {
   };
 
   const handleReintentarDecision = async () => {
-    const id = resultado?.episodio_id;
+    // Se usa el episodio de la decisión pendiente, no el de la pantalla (S07-11).
+    const id = episodioPendiente;
     const pendiente = decisionPendiente;
 
     if (!id || !pendiente || decisionLoading || decisionGuardada) {
@@ -418,10 +494,14 @@ export default function NurseTriagePage() {
 
       if (estado === "error") {
         setDecisionError(
-          "No se pudo verificar si la decisión quedó guardada. No se repetirá el envío para evitar duplicados."
+          `No se pudo verificar si la decisión quedó guardada; no se repetirá el envío para evitar duplicados. ${AVISO_RESPALDO}`
         );
         return;
       }
+
+      // Si el fallo anterior no alcanzó a registrarse (p. ej. sin internet), se registra
+      // ahora, antes de reenviar, para que la auditoría muestre que algo falló.
+      await registrarFalloSiFalta(episodioId, pendiente);
 
       const respuesta = await registrarDecision(episodioId, pendiente);
       aplicarDecisionGuardada(respuesta);
@@ -431,6 +511,28 @@ export default function NurseTriagePage() {
       setDecisionLoading(false);
     }
   };
+
+  // S07-11: al abrir la página se recupera una decisión que no alcanzó a guardarse.
+  // (setTimeout: el almacenamiento del navegador solo existe en el cliente, no al renderizar
+  // en el servidor.)
+  useEffect(() => {
+    const t = window.setTimeout(restaurarRespaldo, 0);
+    return () => window.clearTimeout(t);
+  }, [restaurarRespaldo]);
+
+  // S07-11: cuando vuelve la conexión se reintenta solo. El ref apunta siempre a la versión
+  // actual del handler (con la decisión pendiente vigente).
+  const reintentarRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    reintentarRef.current = () => {
+      void handleReintentarDecision();
+    };
+  });
+  useEffect(() => {
+    const alVolverConexion = () => reintentarRef.current();
+    window.addEventListener("online", alVolverConexion);
+    return () => window.removeEventListener("online", alVolverConexion);
+  }, []);
 
   const handleSubmit = async () => {
     setError(null);
