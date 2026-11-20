@@ -5,7 +5,7 @@ from typing import Optional
 from uuid import UUID
 
 import psycopg
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from pydantic import ValidationError
 
 from app import audit
@@ -21,6 +21,14 @@ from app.schemas.decision import (
     JUSTIFICACION_MIN_CARACTERES,
     DecisionInput,
     DecisionResponse,
+)
+from app.schemas.cola import (
+    ESTADOS_ACTIVOS,
+    LIMIT_MAXIMO,
+    LIMIT_POR_DEFECTO,
+    ColaTriageItem,
+    EstadoEpisodio,
+    PatientSummary,
 )
 from app.schemas.evaluacion import ClasificacionIAResponse
 from app.schemas.triage import FormularioClinicoInput, FormularioClinicoResponse
@@ -458,6 +466,8 @@ _INSERT_CLASIFICACION = """
 """
 
 _SEXO_A_CONTRATO = {"masculino": "masculino", "femenino": "femenino"}
+# La API pública usa los valores en inglés (igual que GET /patients).
+_SEXO_A_API = {"masculino": "male", "femenino": "female"}
 
 
 def _edad_anios(nacimiento: date, hoy: date) -> int:
@@ -632,3 +642,115 @@ def evaluar_episodio(
         latencia_ms=latencia,
         fecha_hora_solicitud=t_solicitud,
     )
+
+
+# --- Cola priorizada (S10-3) -------------------------------------------------
+
+# Nivel vigente: el final si la enfermera ya decidió; si no, el último sugerido por la IA.
+# Orden: ESI ascendente (1 arriba); a igual nivel, el que lleva más tiempo esperando.
+# Los episodios aún sin nivel van al final. episodio_id desempata para que la
+# paginación sea estable entre páginas.
+# Del paciente solo se leen fecha de nacimiento y sexo: nunca nombre ni RUT.
+_COLA_TRIAGE = """
+    SELECT
+        e.episodio_id,
+        e.paciente_id,
+        p.fecha_nacimiento,
+        p.sexo_biologico,
+        e.estado,
+        cia.nivel_esi_sugerido,
+        dc.nivel_esi_final,
+        e.fecha_hora_ingreso,
+        GREATEST(
+            0,
+            floor(extract(epoch FROM ((now() AT TIME ZONE 'UTC') - e.fecha_hora_ingreso)) / 60)
+        )::int AS minutos_espera
+    FROM episodio_triage e
+    JOIN paciente p ON p.paciente_id = e.paciente_id
+    LEFT JOIN LATERAL (
+        SELECT nivel_esi_sugerido
+        FROM clasificacion_ia
+        WHERE episodio_id = e.episodio_id
+        ORDER BY tiempo_respuesta DESC NULLS LAST
+        LIMIT 1
+    ) cia ON TRUE
+    LEFT JOIN decision_clinica dc ON dc.episodio_id = e.episodio_id
+    WHERE e.estado = ANY(%(estados)s)
+      AND (
+          %(nivel_esi)s::int IS NULL
+          OR COALESCE(dc.nivel_esi_final, cia.nivel_esi_sugerido) = %(nivel_esi)s::int
+      )
+    ORDER BY
+        COALESCE(dc.nivel_esi_final, cia.nivel_esi_sugerido) ASC NULLS LAST,
+        e.fecha_hora_ingreso ASC,
+        e.episodio_id ASC
+    OFFSET %(skip)s
+    LIMIT %(limit)s
+"""
+
+
+@router.get(
+    "/cola",
+    response_model=list[ColaTriageItem],
+    tags=["Triages"],
+    summary="Cola de triage priorizada por nivel ESI y tiempo de espera",
+    description=(
+        "Lista inicial del tablero médico y la sala de espera, antes de las "
+        "actualizaciones en vivo. ESI 1 arriba; a igual nivel, el que lleva más "
+        "tiempo esperando. Sin filtro de estado devuelve los episodios abiertos "
+        "(en_espera y en_atencion). No incluye RUT ni nombre del paciente."
+    ),
+)
+def listar_cola(
+    estado: Optional[EstadoEpisodio] = Query(
+        default=None, description="Filtra por estado del episodio."
+    ),
+    nivel_esi: Optional[int] = Query(
+        default=None,
+        ge=1,
+        le=5,
+        description="Filtra por nivel ESI vigente (el final si ya hay decisión, si no el sugerido).",
+    ),
+    skip: int = Query(default=0, ge=0, description="Registros a saltar (paginación)."),
+    limit: int = Query(
+        default=LIMIT_POR_DEFECTO,
+        ge=1,
+        le=LIMIT_MAXIMO,
+        description="Cantidad máxima de registros a devolver.",
+    ),
+    usuario: Usuario = Depends(requiere_rol("medico", "enfermero")),
+    conn: psycopg.Connection = Depends(get_conn),
+):
+    with conn.cursor() as cur:
+        _verificar_usuario(cur, usuario)
+        cur.execute(
+            _COLA_TRIAGE,
+            {
+                "estados": [estado] if estado else list(ESTADOS_ACTIVOS),
+                "nivel_esi": nivel_esi,
+                "skip": skip,
+                "limit": limit,
+            },
+        )
+        filas = cur.fetchall()
+
+    hoy = _ahora_utc().date()
+    return [
+        ColaTriageItem(
+            episodio_id=episodio_id,
+            patient=PatientSummary(
+                patient_id=paciente_id,
+                age=_edad_anios(nacimiento, hoy) if nacimiento else None,
+                biological_sex=_SEXO_A_API.get(sexo),
+            ),
+            estado=estado_ep,
+            nivel_esi_sugerido=sugerido,
+            nivel_esi_final=final,
+            fecha_hora_ingreso=ingreso,
+            minutos_espera=minutos,
+        )
+        for (
+            episodio_id, paciente_id, nacimiento, sexo, estado_ep,
+            sugerido, final, ingreso, minutos,
+        ) in filas
+    ]

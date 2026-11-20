@@ -306,9 +306,9 @@ paths:
       tags:
         - Triages
       summary: Cola de triage para el personal clínico
-      description: Devuelve los episodios activos ordenados por prioridad (nivel ESI más urgente primero y, a igual nivel, el que lleva más tiempo esperando). Es el tablero médico. Requiere rol de enfermería o médico.
+      description: Devuelve los episodios activos ordenados por prioridad (nivel ESI más urgente primero y, a igual nivel, el que lleva más tiempo esperando). Los episodios aún sin nivel ESI van al final. Sin filtro de estado devuelve en_espera y en_atencion. Es la lista inicial del tablero médico y la sala de espera. No incluye RUT ni nombre. Requiere rol de enfermería o médico (403 para otros roles).
       operationId: listTriageQueue
-      x-estado: pendiente
+      x-estado: implementado
       parameters:
         - name: estado
           in: query
@@ -624,7 +624,8 @@ components:
           type: integer
           minimum: 0
           maximum: 130
-          description: Edad derivada de la fecha de nacimiento. Nunca se expone la fecha exacta.
+          nullable: true
+          description: Edad derivada de la fecha de nacimiento. Nunca se expone la fecha exacta. Nula si el paciente no tiene fecha de nacimiento registrada.
         biological_sex:
           type: string
           enum: [male, female]
