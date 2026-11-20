@@ -120,7 +120,8 @@ export interface DecisionResponse {
 // --- Cola de triage y sala de espera (GET /triage/cola, GET /sala-espera) ---
 export interface ResumenPaciente {
   patient_id: string;
-  age: number;
+  /** Nula si el paciente no tiene fecha de nacimiento registrada. */
+  age: number | null;
   biological_sex?: SexoBiologico | null;
 }
 
