@@ -163,3 +163,45 @@ def test_si_falla_el_log_se_revierte_la_decision(monkeypatch):
     with _admin() as conn:
         n = conn.execute("SELECT count(*) FROM decision_clinica WHERE episodio_id = %s", (ep,)).fetchone()[0]
     assert n == 0
+
+
+def test_registro_de_la_ia_lleva_version_del_prompt_modelo_y_respuesta():
+    """S10-5: la auditoría dice con qué prompt, modelo y respuesta se generó la sugerencia."""
+    ep, sugerido, _ = _flujo_completo()
+    texto = _registros(ep)[0][4]
+    assert "version_prompt: esi-v" in texto
+    assert "modelo: " in texto and "fallback_aplicado: " in texto
+    assert f"nivel_esi: {sugerido}" in texto and "justificacion: " in texto
+    assert "--- ficha enviada ---" in texto and "Edad:" in texto
+
+
+def test_override_conserva_intacto_el_registro_de_la_ia():
+    """S10-5, caso US-05: si la decisión difiere de la IA quedan ambos registros, sin tocar el primero."""
+    ep = _episodio(sugerido=None)
+    _con_nacimiento(ep)
+    sug = _post(f"/api/v1/triage/{ep}/evaluate").json()["nivel_esi_sugerido"]
+    antes = _registros(ep)
+    assert len(antes) == 1
+    final = 5 if sug != 5 else 4
+    d = _post(
+        f"/api/v1/triage/{ep}/decision",
+        json={"nivel_esi_final": final, "justificacion": "Criterio clínico de la enfermera tratante"},
+    )
+    assert d.status_code == 201, d.text
+    despues = _registros(ep)
+    assert len(despues) == 2
+    assert despues[0] == antes[0]  # el registro de la IA no cambió
+    ia, dec = despues
+    assert (ia[1], ia[2], ia[3]) == (sug, None, False)  # IA: solo sugerencia
+    assert (dec[1], dec[2], dec[3]) == (sug, final, True)  # decisión: ambos niveles y discrepancia
+    with _admin() as conn:
+        (decision_id,) = conn.execute(
+            "SELECT decision_id FROM registro_auditoria WHERE registro_id = %s", (dec[7],)
+        ).fetchone()
+        (justificacion,) = conn.execute(
+            "SELECT justificacion FROM decision_clinica WHERE decision_id = %s", (decision_id,)
+        ).fetchone()
+        assert conn.execute("SELECT * FROM verificar_cadena_auditoria()").fetchall() == []
+    assert str(decision_id) == d.json()["decision_id"]
+    assert justificacion == "Criterio clínico de la enfermera tratante"  # el motivo queda enlazado
+

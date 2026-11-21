@@ -40,3 +40,28 @@ Verificar integridad (vacío = íntegra): `SELECT * FROM verificar_cadena_audito
 ## Pendiente (solo documentado)
 Particionamiento anual por `fecha_hora_evento` y archivado en frío (WORM) del diseño: no implementado.
 Al particionar, hay que recrear los triggers en la tabla padre y revisar el verificador.
+
+## Qué guarda el registro de la inferencia (S10-5)
+`prompt_enviado` del evento `ia.clasificacion.sugerida` (o `triage.clasificacion.respaldo_aplicada`) es un texto con este formato:
+
+```
+version_prompt: esi-v3 (ab595a512ab7)
+modelo: claude-haiku-5-5
+fallback_aplicado: no
+--- ficha enviada ---
+<la ficha exacta que viajó a la IA, sin RUT, correo ni teléfono, sin previsión ni ubicación>
+--- respuesta ---
+nivel_esi: 2
+justificacion: <texto devuelto por el motor>
+```
+
+- **Versión del prompt:** constante `VERSION_PROMPT` en `app/ai/engine.py`, con la huella (SHA-256 corto) del prompt del sistema.
+  Si alguien edita el prompt sin subir la versión, falla `tests/test_auditoria_prompt.py`.
+- **Modelo:** el de `ClasificacionIA.modelo_usado` (o `fallback-rule-engine`).
+- No hay columnas aparte en `registro_auditoria`: todo va dentro de `prompt_enviado`, que el hash de la cadena ya cubre.
+  Agregar columnas obligaría a cambiar la fórmula del hash y re-encadenar la tabla.
+- **Decisión:** el evento de `/decision` guarda `sugerencia_ia`, `decision_final`, `hay_discrepancia` y `decision_id`.
+  El motivo escrito por la enfermera queda en `decision_clinica.justificacion`, enlazado por ese `decision_id`
+  (texto libre: no se copia al log).
+- Si la decisión difiere de la IA quedan **dos registros** (el de la IA no se toca) y `hay_discrepancia = true` en el segundo.
+- **Límite conocido:** el texto libre solo se sanitiza para RUT, correo y teléfono; un nombre escrito a mano en el motivo de consulta no se detecta.
