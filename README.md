@@ -157,6 +157,21 @@ uvicorn app.main:app --reload --ssl-keyfile="localhost+1-key.pem" --ssl-certfile
   exigen la cookie o `Authorization: Bearer <token>`. `usuario_id` sale del token.
 - **Frontend:** pantalla `/login`; `/nurse`, `/doctor` y `/auditor` solo abren con su rol.
 
+## 🛡️ Endurecimiento de la API (S11-1)
+
+- **Límite de peticiones:** `POST /auth/login` por IP (`RATE_LIMIT_LOGIN`, por defecto `10/minute`) y
+  `/triage/*` por usuario (`RATE_LIMIT_TRIAGE`, por defecto `120/minute`). Al superarlo la API responde
+  **429** con `Retry-After`. `RATE_LIMIT_ENABLED=false` lo apaga (por ejemplo, en pruebas de carga).
+  Los contadores están en memoria de cada proceso: con varias réplicas el límite efectivo se multiplica.
+- **IP detrás de proxies:** por defecto se usa la IP de la conexión y se ignora `X-Forwarded-For`.
+  Si hay proxies de confianza delante (Ingress, rewrite de Next), indicar cuántos en `TRUSTED_PROXY_HOPS`.
+- **Headers de seguridad** en todas las respuestas (`app/core/seguridad_http.py`): CSP,
+  `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy` y HSTS
+  (este último no se envía con `ENVIRONMENT=development`).
+- **CORS:** solo los orígenes de `CORS_ORIGINS` (por defecto `http://localhost:3000`). `*` no se admite.
+- **Recarga automática:** `python app/main.py` solo usa `reload` con `ENVIRONMENT=development`.
+  El contenedor arranca con `uvicorn` sin `--reload`.
+
 ## 🔒 Prohibición de Mocks Locales (Dev/prod parity)
 
 Para mantener la consistencia entre los entornos de desarrollo y producción, es obligatorio utilizar los servicios reales definidos en `docker-compose.yml` durante el desarrollo integrado de MediTriage.

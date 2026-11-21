@@ -5,6 +5,7 @@ import psycopg
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 
 from app.core.auth import usuario_actual
+from app.core.rate_limit import limite_login
 from app.core.security import (
     COOKIE_NOMBRE,
     HASH_RELLENO,
@@ -36,6 +37,8 @@ _CREDENCIALES_INVALIDAS = "Correo o contraseña incorrectos."
     "/login",
     response_model=LoginResponse,
     summary="Inicia sesión",
+    # Límite por IP contra fuerza bruta: cuenta intentos válidos e inválidos (429 al superarlo).
+    dependencies=[Depends(limite_login)],
 )
 def login(data: LoginInput, response: Response, conn: psycopg.Connection = Depends(get_conn_login)):
     with conn.cursor() as cur:

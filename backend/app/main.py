@@ -16,6 +16,8 @@ from app.api.v1.endpoints import auth, health, patients, triage, ws
 from app.core.auth import usuario_actual
 from app.core.canary import verificar_clave_cifrado
 from app.core.logging_config import configure_logging, request_id_var, ruta_sin_parametros
+from app.core.rate_limit import limite_triage
+from app.core.seguridad_http import configurar_seguridad_http, es_desarrollo
 from app.core.telemetry import (
     configure_telemetry,
     iniciar_span,
@@ -63,12 +65,20 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# S11-1: CORS restringido al origen del frontend y headers de seguridad en todas las respuestas.
+configurar_seguridad_http(app)
+
 # PÃºblicos: /health y el login. Todo lo demÃ¡s exige sesiÃ³n vÃ¡lida (token en cookie o Bearer);
 # ademÃ¡s cada endpoint indica quÃ© roles puede usarlo (app/core/auth.py: requiere_rol).
 app.include_router(health.router, prefix="/api/v1")
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(patients.router, prefix="/api/v1", dependencies=[Depends(usuario_actual)])
-app.include_router(triage.router, prefix="/api/v1", dependencies=[Depends(usuario_actual)])
+# /triage/* lleva además un límite de peticiones por usuario (429 al superarlo).
+app.include_router(
+    triage.router,
+    prefix="/api/v1",
+    dependencies=[Depends(usuario_actual), Depends(limite_triage)],
+)
 # El WebSocket valida el token Ã©l mismo (un 401 HTTP no aplica a un canal ya abierto).
 app.include_router(ws.router, prefix="/api/v1")
 
@@ -177,7 +187,13 @@ async def validation_error_handler(request: Request, exc: RequestValidationError
 
 @app.exception_handler(StarletteHTTPException)
 async def http_error_handler(request: Request, exc: StarletteHTTPException):
-    titulos = {409: "Conflicto", 404: "No encontrado", 403: "Prohibido", 401: "No autorizado"}
+    titulos = {
+        429: "Demasiadas peticiones",
+        409: "Conflicto",
+        404: "No encontrado",
+        403: "Prohibido",
+        401: "No autorizado",
+    }
     # No se registra exc.detail: el 409 de /patients incluye el RUT.
     if exc.status_code == 422:
         logger.warning(
@@ -203,10 +219,19 @@ async def http_error_handler(request: Request, exc: StarletteHTTPException):
 def root():
     return {"message": "Servidor MediTriage activo", "docs": "/docs"}
 
+def usar_reload() -> bool:
+    """La recarga automática es solo para desarrollo local (ENVIRONMENT=development).
+
+    En el contenedor no debe correr: vigila archivos, reinicia el proceso y gasta CPU.
+    Si ENVIRONMENT no está definido, no se recarga.
+    """
+    return es_desarrollo()
+
+
 if __name__ == "__main__":
     puerto = int(os.environ.get("PORT", 8000))
     espera = int(os.environ.get("SHUTDOWN_TIMEOUT", 20))
     uvicorn.run(
-        "main:app", host="0.0.0.0", port=puerto, reload=True, log_config=None,
+        "main:app", host="0.0.0.0", port=puerto, reload=usar_reload(), log_config=None,
         timeout_graceful_shutdown=espera,
     )
