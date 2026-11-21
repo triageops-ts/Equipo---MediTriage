@@ -121,16 +121,16 @@ def ip_cliente(request: Request) -> str:
     return request.client.host if request.client else "desconocido"
 
 
-def _aplicar(nombre: str, clave: str, variable: str, por_defecto: str) -> None:
+def _aplicar(regla: str, clave: str, variable: str, por_defecto: str) -> None:
     if not limite_activo():
         return
     limite, ventana = parsear_limite(os.environ.get(variable, por_defecto))
-    espera = limitador.intentar(f"{nombre}:{clave}", limite, ventana)
+    espera = limitador.intentar(f"{regla}:{clave}", limite, ventana)
     if espera is None:
         return
     segundos = max(1, math.ceil(espera))
     # Sin IP ni id de usuario en el log (datos personales).
-    logger.warning("rate_limit_excedido", extra={"limite": nombre})
+    logger.warning("rate_limit_excedido", extra={"limite": regla})
     raise HTTPException(
         status.HTTP_429_TOO_MANY_REQUESTS,
         f"Demasiadas peticiones. Intente nuevamente en {segundos} segundos.",
