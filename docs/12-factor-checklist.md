@@ -23,7 +23,7 @@
 | *10 Dev/prod parity* | Sin mocks locales | No cumple | Prohibir mocks o librerías en memoria para Postgres/Redis en desarrollo; todo el equipo debe correr contra instancias reales del docker-compose. | Lucas Benítez (Jefe técnico) |
 | *10 Dev/prod parity* | Paridad de configuración | No aplica | Cubierto por el Factor 03 (Config). | - |
 | *11 Logs* | Logs a stdout/stderr | No cumple | Configurar backend (FastAPI/Uvicorn) y frontend (Next.js) para loggear en JSON estructurado a stdout, prohibiendo escritura a disco. | Isidora Ramos (DevSecOps) |
-| *11 Logs* | Agregación de logs | No cumple | Agregar al C4 L2 un sistema externo tipo Loki + Grafana o CloudWatch Logs, y definirlo en el ADR. | Isidora Ramos (DevSecOps) |
+| *11 Logs* | Agregación de logs | Cumple | Loki + Grafana Alloy + Grafana (ADR `docs/adr/OBS-001-agregacion-logs.md`), agregado como sistema externo en el C4 L2 (`docs/c4/C4L2-Actualizado.png`). Demo local con 2 réplicas del backend: búsqueda por `request_id` en Grafana (`docs/img/loki-logs-2-replicas.png`, `docs/img/loki-busqueda-request-id.png`) y búsqueda de PII sin resultados (`docs/img/loki-sin-pii.png`). | Isidora Ramos (DevSecOps) |
 | *11 Logs* | PII enmascarada | No cumple | Implementar middleware de sanitización de logs, separado del audit log en Postgres. | Lucas Benítez (Jefe técnico) |
 | *11 Logs* | Audit Log separado | Cumple | Registro de negocio separado del log técnico en Postgres. | - |
 | *12 Admin Processes* | Herramienta de migraciones | Cumple | Adoptar Alembic, versionado en el mismo repositorio que el backend. | Lucas Benítez (Jefe técnico) |
