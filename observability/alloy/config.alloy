@@ -1,0 +1,43 @@
+// Recolector de logs (ADR OBS-001). Lee los logs de los contenedores Docker
+// del servicio "backend" y los envía a Loki.
+
+discovery.docker "contenedores" {
+  host = "unix:///var/run/docker.sock"
+}
+
+discovery.relabel "backend" {
+  targets = []
+
+  // Solo los contenedores del servicio "backend" (todas sus réplicas).
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    regex         = "backend"
+    action        = "keep"
+  }
+
+  // Etiqueta "service" para filtrar en Grafana.
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "service"
+  }
+
+  // Etiqueta "container" para saber de qué réplica viene cada log.
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+}
+
+loki.source.docker "backend" {
+  host          = "unix:///var/run/docker.sock"
+  targets       = discovery.docker.contenedores.targets
+  relabel_rules = discovery.relabel.backend.rules
+  forward_to    = [loki.write.local.receiver]
+}
+
+loki.write "local" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

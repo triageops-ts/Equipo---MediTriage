@@ -1,11 +1,17 @@
 # Prometheus + Grafana locales para probar el dashboard (S11-17) sin Kubernetes.
+# Loki + Alloy para la agregación de logs (S11-12, ADR OBS-001).
 # Se usa junto al compose principal, desde la raiz del repo:
-#   docker compose -f docker-compose.yml -f observability/docker-compose.observability.yml up -d --build backend redis prometheus grafana
+#   docker compose -f docker-compose.yml -f observability/docker-compose.observability.yml up -d --build --scale backend=2 backend redis prometheus grafana loki alloy
 # Grafana: http://localhost:3000 (admin / admin)   Prometheus: http://localhost:9090
 services:
   backend:
     environment:
       - METRICS_PORT=9464
+    # Para correr 2 réplicas (S11-12): se quita el nombre fijo del contenedor y
+    # cada réplica toma un puerto distinto (8000 y 8001).
+    container_name: !reset null
+    ports: !override
+      - "8000-8001:8000"
 
   prometheus:
     image: prom/prometheus:v2.55.1
@@ -34,3 +40,28 @@ services:
       - "3000:3000"
     depends_on:
       - prometheus
+      - loki
+
+  # Agregación de logs (S11-12, ADR OBS-001)
+  loki:
+    image: grafana/loki:3.3.2
+    container_name: meditriage-loki
+    command: -config.file=/etc/loki/local-config.yaml
+    ports:
+      - "3100:3100"
+
+  alloy:
+    image: grafana/alloy:v1.5.1
+    container_name: meditriage-alloy
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    volumes:
+      - ./observability/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - "12345:12345"
+    depends_on:
+      - loki
