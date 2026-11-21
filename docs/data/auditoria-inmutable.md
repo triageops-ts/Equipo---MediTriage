@@ -45,7 +45,7 @@ Al particionar, hay que recrear los triggers en la tabla padre y revisar el veri
 `prompt_enviado` del evento `ia.clasificacion.sugerida` (o `triage.clasificacion.respaldo_aplicada`) es un texto con este formato:
 
 ```
-version_prompt: esi-v2 (aeffcf7aac1e)
+version_prompt: esi-v3 (ab595a512ab7)
 modelo: claude-haiku-5-5
 fallback_aplicado: no
 --- ficha enviada ---

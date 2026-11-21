@@ -79,7 +79,8 @@ en la justificación.
 # Version del prompt del sistema (S10-5). Se guarda en cada registro de auditoria para saber con
 # que instrucciones se genero una sugerencia. Subela cada vez que cambies `_SISTEMA`.
 #   esi-v1: S09-4 (prompt original)   esi-v2: S09-10 (regla de no usar datos economicos/previsionales)
-VERSION_PROMPT = "esi-v2"
+#   esi-v3: S10-8 (filtros anti prompt-injection en el motivo de consulta)
+VERSION_PROMPT = "esi-v3"
 # Huella del texto de `_SISTEMA`: si alguien lo edita sin subir la version, el test lo detecta.
 HUELLA_PROMPT = hashlib.sha256(_SISTEMA.encode("utf-8")).hexdigest()[:12]
 

@@ -7,9 +7,9 @@ from app.ai.contrato import ClasificacionIA, EntradaIA
 # Importados para reutilizar la base falsa y el motor falso de test_evaluate.py.
 from test_evaluate import PACIENTE, _evaluar, bd, motor  # noqa: F401
 
-# Huella de `_SISTEMA` al subir a esi-v2. Si este test falla, cambiaste el prompt:
+# Huella de `_SISTEMA` al subir a esi-v3. Si este test falla, cambiaste el prompt:
 # sube VERSION_PROMPT en engine.py y actualiza esta huella.
-HUELLA_ESPERADA = "aeffcf7aac1e"
+HUELLA_ESPERADA = "ab595a512ab7"
 
 
 def _entrada(motivo=None) -> EntradaIA:
