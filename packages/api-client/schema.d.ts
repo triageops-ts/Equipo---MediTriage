@@ -139,7 +139,7 @@ export interface paths {
         put?: never;
         /**
          * Pide a la IA un nivel ESI sugerido
-         * @description Envía a la IA los datos clínicos anonimizados del episodio y devuelve el nivel ESI sugerido con su justificación. Si la IA falla o tarda más de 1500 ms, se usa el árbol de reglas de respaldo y `fallback_aplicado` es true.
+         * @description Recibe un episodio ya registrado, lee sus signos vitales y síntomas, arma el payload sin datos personales (edad, sexo biológico, signos vitales, síntomas y motivo sanitizado), llama al motor de IA y guarda el resultado en `clasificacion_ia`. Si la IA falla o tarda más de 1500 ms, se usa el árbol de reglas de respaldo y `fallback_aplicado` es true. Requiere rol de enfermería. El paciente debe tener fecha de nacimiento registrada (la IA recibe la edad, no la fecha). Con `Idempotency-Key`, repetir la misma clave sobre el mismo episodio devuelve la clasificación ya guardada sin volver a llamar a la IA.
          */
         post: operations["evaluateTriage"];
         delete?: never;
@@ -177,7 +177,7 @@ export interface paths {
         };
         /**
          * Cola de triage para el personal clínico
-         * @description Devuelve los episodios activos ordenados por prioridad (nivel ESI más urgente primero y, a igual nivel, el que lleva más tiempo esperando). Es el tablero médico. Requiere rol de enfermería o médico.
+         * @description Devuelve los episodios activos ordenados por prioridad (nivel ESI más urgente primero y, a igual nivel, el que lleva más tiempo esperando). Los episodios aún sin nivel ESI van al final. Sin filtro de estado devuelve en_espera y en_atencion. Es la lista inicial del tablero médico y la sala de espera. No incluye RUT ni nombre. Requiere rol de enfermería o médico (403 para otros roles).
          */
         get: operations["listTriageQueue"];
         put?: never;
@@ -359,8 +359,8 @@ export interface components {
         PatientSummary: {
             /** Format: uuid */
             patient_id: string;
-            /** @description Edad derivada de la fecha de nacimiento. Nunca se expone la fecha exacta. */
-            age: number;
+            /** @description Edad derivada de la fecha de nacimiento. Nunca se expone la fecha exacta. Nula si el paciente no tiene fecha de nacimiento registrada. */
+            age: number | null;
             /** @enum {string|null} */
             biological_sex?: "male" | "female" | null;
         };
@@ -638,6 +638,26 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
+        /** @description Se superó el límite de peticiones (S11-1). En `/auth/login` el límite es por IP (por defecto 10 por minuto); en `/triage/*`, por usuario autenticado (por defecto 120 por minuto). Los intentos de login fallidos también cuentan. El header `Retry-After` indica cuántos segundos esperar antes de reintentar. */
+        TooManyRequests: {
+            headers: {
+                /** @description Segundos que hay que esperar antes de volver a intentar. */
+                "Retry-After"?: number;
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "type": "https://api.meditriage.com/problems/429",
+                 *       "title": "Demasiadas peticiones",
+                 *       "status": 429,
+                 *       "detail": "Demasiadas peticiones. Intente nuevamente en 42 segundos.",
+                 *       "instance": "/api/v1/auth/login"
+                 *     }
+                 */
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
         /** @description El usuario está autenticado pero su rol no tiene permiso para este recurso (por ejemplo, se requiere rol de auditor). */
         Forbidden: {
             headers: {
@@ -759,6 +779,7 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             422: components["responses"]["ValidationError"];
+            429: components["responses"]["TooManyRequests"];
             500: components["responses"]["InternalServerError"];
         };
     };
@@ -850,6 +871,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["ValidationError"];
+            429: components["responses"]["TooManyRequests"];
             500: components["responses"]["InternalServerError"];
         };
     };
@@ -881,6 +903,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["ValidationError"];
+            429: components["responses"]["TooManyRequests"];
             500: components["responses"]["InternalServerError"];
         };
     };
@@ -917,6 +940,7 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["ValidationError"];
+            429: components["responses"]["TooManyRequests"];
             500: components["responses"]["InternalServerError"];
         };
     };
@@ -950,6 +974,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             422: components["responses"]["ValidationError"];
+            429: components["responses"]["TooManyRequests"];
             500: components["responses"]["InternalServerError"];
         };
     };

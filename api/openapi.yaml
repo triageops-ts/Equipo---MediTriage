@@ -116,6 +116,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '422':
           $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -223,6 +225,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '422':
           $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -258,6 +262,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '422':
           $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -298,6 +304,8 @@ paths:
           $ref: '#/components/responses/Conflict'
         '422':
           $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -337,6 +345,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '422':
           $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -1032,6 +1042,29 @@ components:
             status: 409
             detail: "El episodio ya tiene una decisión registrada; no se puede reemplazar."
             instance: "/api/v1/triage/3f8a6c1e-5b7d-4e2a-9c41-2d8f0a7b6e13/decision"
+    TooManyRequests:
+      description: >
+        Se superó el límite de peticiones (S11-1). En `/auth/login` el límite es por IP
+        (por defecto 10 por minuto); en `/triage/*`, por usuario autenticado (por defecto 120 por minuto).
+        Los intentos de login fallidos también cuentan. El header `Retry-After` indica cuántos
+        segundos esperar antes de reintentar.
+      headers:
+        Retry-After:
+          description: Segundos que hay que esperar antes de volver a intentar.
+          schema:
+            type: integer
+            minimum: 1
+            example: 42
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          example:
+            type: "https://api.meditriage.com/problems/429"
+            title: "Demasiadas peticiones"
+            status: 429
+            detail: "Demasiadas peticiones. Intente nuevamente en 42 segundos."
+            instance: "/api/v1/auth/login"
     Forbidden:
       description: El usuario está autenticado pero su rol no tiene permiso para este recurso (por ejemplo, se requiere rol de auditor).
       content:
