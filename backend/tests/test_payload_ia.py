@@ -179,4 +179,7 @@ def test_evaluate_de_punta_a_punta_no_envia_datos_del_paciente(cliente):
             "AND prompt_enviado IS NOT NULL",
             (episodio_id,),
         ).fetchone()
-    assert prompt_auditado == cliente.ultima()["messages"][0]["content"]
+    # S10-5: el registro agrega version del prompt, modelo y respuesta alrededor de la ficha enviada.
+    assert "version_prompt: " in prompt_auditado and "modelo: " in prompt_auditado
+    ficha_auditada = prompt_auditado.split("--- ficha enviada ---\n", 1)[1].split("\n--- respuesta ---", 1)[0]
+    assert ficha_auditada == cliente.ultima()["messages"][0]["content"]

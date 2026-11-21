@@ -76,6 +76,14 @@ de residencia o de cobertura de salud del paciente no debe influir en el nivel n
 en la justificación.
 - La decisión final es siempre de la enfermera."""
 
+# Version del prompt del sistema (S10-5). Se guarda en cada registro de auditoria para saber con
+# que instrucciones se genero una sugerencia. Subela cada vez que cambies `_SISTEMA`.
+#   esi-v1: S09-4 (prompt original)   esi-v2: S09-10 (regla de no usar datos economicos/previsionales)
+#   esi-v3: S10-8 (filtros anti prompt-injection en el motivo de consulta)
+VERSION_PROMPT = "esi-v3"
+# Huella del texto de `_SISTEMA`: si alguien lo edita sin subir la version, el test lo detecta.
+HUELLA_PROMPT = hashlib.sha256(_SISTEMA.encode("utf-8")).hexdigest()[:12]
+
 _PROMPT = ChatPromptTemplate.from_messages([("system", _SISTEMA), ("human", "{ficha}")])
 _PARSER = PydanticOutputParser(pydantic_object=SalidaIA)
 
@@ -151,6 +159,27 @@ def _ficha(e: EntradaIA) -> str:
 def ficha_enviada(entrada: EntradaIA) -> str:
     """Texto exacto (ya sanitizado) que viaja a la IA; se guarda en la auditoría."""
     return _ficha(entrada)
+
+
+def registro_inferencia(entrada: EntradaIA, resultado: ClasificacionIA) -> str:
+    """Texto para `registro_auditoria.prompt_enviado` (S10-5).
+
+    Lleva la version del prompt, el modelo, la ficha exacta enviada (ya sin RUT, correo ni
+    telefono) y lo que respondio el motor. La tabla no tiene columnas aparte para esto, y como
+    el hash de la cadena cubre `prompt_enviado`, queda protegido contra cambios.
+    """
+    return "\n".join(
+        [
+            f"version_prompt: {VERSION_PROMPT} ({HUELLA_PROMPT})",
+            f"modelo: {resultado.modelo_usado}",
+            f"fallback_aplicado: {'si' if resultado.fallback_aplicado else 'no'}",
+            "--- ficha enviada ---",
+            _ficha(entrada),
+            "--- respuesta ---",
+            f"nivel_esi: {resultado.nivel_esi_sugerido}",
+            f"justificacion: {resultado.justificacion}",
+        ]
+    )
 
 
 def hash_entrada(entrada: EntradaIA) -> str:
