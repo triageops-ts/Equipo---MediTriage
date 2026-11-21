@@ -8,7 +8,6 @@ import uuid
 import jwt
 import pytest
 from fastapi.testclient import TestClient
-from starlette.websockets import WebSocketDisconnect
 
 from app.core.security import COOKIE_NOMBRE, crear_token, hash_password, leer_token
 from app.db import get_conn, get_conn_login

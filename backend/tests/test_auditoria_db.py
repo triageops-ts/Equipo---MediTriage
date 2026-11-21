@@ -98,7 +98,6 @@ def test_app_no_puede_update_ni_delete_ni_truncate():
     ep, _, _ = _flujo_completo()
     rid = _registros(ep)[0][7]
     with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
-        usuario = conn.execute("SELECT usuario_id FROM usuario_staff WHERE rol='enfermero' LIMIT 1")
         # permisos: sin UPDATE/DELETE para meditriage_app
         conn.rollback()
         set_rls_context(conn, "enfermero", uuid.uuid4())
