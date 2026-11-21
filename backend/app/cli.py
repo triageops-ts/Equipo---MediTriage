@@ -11,7 +11,6 @@ import argparse
 import os
 import sys
 from datetime import date
-from uuid import UUID
 
 import psycopg
 
