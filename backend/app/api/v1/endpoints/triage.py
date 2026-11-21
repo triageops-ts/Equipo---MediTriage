@@ -617,7 +617,7 @@ def evaluar_episodio(
                 ),
                 usuario_id_actor=usuario.usuario_id,
                 sugerencia_ia=resultado.nivel_esi_sugerido,
-                prompt_enviado=engine.ficha_enviada(entrada),
+                prompt_enviado=engine.registro_inferencia(entrada, resultado),
             )
 
     latencia = _latencia_ms(t_solicitud, t_respuesta)
