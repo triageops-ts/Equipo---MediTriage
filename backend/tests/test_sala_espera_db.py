@@ -10,6 +10,7 @@ revisan que todos los turnos propios compartan la misma letra.
 """
 import os
 import random
+import re
 from datetime import datetime, timedelta
 
 import psycopg
@@ -99,6 +100,11 @@ def test_orden_turnos_y_cerrado_fuera(sala_de_prueba):
     propios = _propios(_sala())
     assert [_numero(f["turno"]) for f in propios] == ORDEN_ESPERADO
     assert len({f["turno"].split("-")[0] for f in propios}) == 1  # misma letra: mismo día
+
+
+def test_letra_valida_aunque_el_dia_sea_anterior_al_2000(sala_de_prueba):
+    # Los episodios de la prueba caen entre 1990 y 2010: la letra tiene que ser A..Z igual.
+    assert all(re.fullmatch(r"[A-Z]-[0-9]+", f["turno"]) for f in _propios(_sala()))
 
 
 def test_turnos_no_se_repiten(sala_de_prueba):
