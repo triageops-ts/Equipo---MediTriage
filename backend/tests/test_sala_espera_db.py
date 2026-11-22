@@ -26,19 +26,21 @@ pytestmark = pytest.mark.skipif(
 URL = "/api/v1/sala-espera"
 MUY_ANTIGUO = 1_000_000  # minutos; los episodios de otras pruebas esperan mucho menos
 
-# etiqueta: (nivel sugerido, nivel final, estado). El orden de la lista es el de llegada,
-# así que el número de turno esperado es 1, 2, ... en este orden (la letra es la del día).
+# etiqueta: (nivel sugerido por la IA, nivel final de enfermería, estado). El orden de la
+# lista es el de llegada, así que el número de turno esperado es 1, 2, ... en este orden.
+# La sala solo muestra el nivel FINAL: el sugerido no se publica.
 EPISODIOS = [
-    ("t1", 2, None, "en_espera"),     # A-1
-    ("t2", 3, 1, "en_espera"),        # A-2: la enfermera subió la urgencia -> ESI 1
-    ("t3", 2, None, "en_atencion"),   # A-3
-    ("t4", 1, None, "en_espera"),     # A-4
-    ("t5", 2, None, "cerrado"),       # A-5: no aparece, pero ocupa su número
-    ("t6", 2, None, "en_espera"),     # A-6
+    ("t1", 2, 2, "en_espera"),        # 1
+    ("t2", 3, 1, "en_espera"),        # 2: la enfermera subió la urgencia -> ESI 1
+    ("t3", 2, 2, "en_atencion"),      # 3
+    ("t4", 1, 1, "en_espera"),        # 4
+    ("t5", 2, 2, "cerrado"),          # 5: no aparece, pero ocupa su número
+    ("t6", 2, 2, "en_espera"),        # 6
+    ("t7", 1, None, "en_espera"),     # 7: la IA sugirió ESI 1 pero nadie confirmó -> sin nivel
 ]
 
-# Escrito a mano: ESI 1 primero y, a igual nivel, el que llegó antes.
-ORDEN_ESPERADO = [2, 4, 1, 3, 6]
+# Escrito a mano: ESI 1 primero y, a igual nivel, el que llegó antes. Sin nivel, al final.
+ORDEN_ESPERADO = [2, 4, 1, 3, 6, 7]
 
 
 def _admin():
@@ -118,7 +120,13 @@ def test_nivel_vigente_y_estado(sala_de_prueba):
     assert fila[3]["estado"] == "en_atencion"
     assert fila[3]["posicion"] is None
     # Todos llevan años esperando: ya cumplieron el objetivo de su categoría.
-    assert all(f["tiempo_estimado_min"] == 0 for f in fila.values())
+    assert all(fila[n]["tiempo_estimado_min"] == 0 for n in (1, 2, 3, 4, 6))
+
+
+def test_sugerencia_de_la_ia_sin_confirmar_no_se_publica(sala_de_prueba):
+    fila = _por_numero(_sala())
+    assert fila[7]["nivel_esi"] is None  # la IA sugirió 1, pero enfermería no confirmó
+    assert fila[7]["tiempo_estimado_min"] is None
 
 
 def test_posiciones_consecutivas_en_el_orden_de_la_lista(sala_de_prueba):
@@ -158,6 +166,7 @@ def test_rls_contexto_sala_espera_no_ve_pacientes(sala_de_prueba):
         assert conn.execute("SELECT count(*) FROM paciente").fetchone()[0] == 0
         assert conn.execute("SELECT count(*) FROM usuario_staff").fetchone()[0] == 0
         assert conn.execute("SELECT count(*) FROM signos_vitales").fetchone()[0] == 0
+        assert conn.execute("SELECT count(*) FROM clasificacion_ia").fetchone()[0] == 0
         # Pero sí ve los episodios que necesita para armar la fila.
         assert conn.execute(
             "SELECT count(*) FROM episodio_triage WHERE episodio_id = ANY(%s)",

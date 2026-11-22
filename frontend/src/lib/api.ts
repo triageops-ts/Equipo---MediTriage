@@ -142,7 +142,7 @@ export interface ColaTriageItem {
 export interface SalaEsperaEntry {
   /** Letra del día + correlativo de llegada, p. ej. "A-12". La letra cambia cada día. */
   turno: string;
-  /** Nivel vigente (final o, si no hay, el sugerido). Nulo si aún no se evalúa. */
+  /** Nivel confirmado por enfermería. Nulo mientras no se confirma (la IA no se publica). */
   nivel_esi: EsiLevel | null;
   estado: EstadoEpisodio;
   /** Lugar en la fila (1 = el próximo). Nulo si ya está en atención. */

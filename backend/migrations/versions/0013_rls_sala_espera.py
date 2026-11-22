@@ -1,16 +1,16 @@
 """RLS para la pantalla pública de la sala de espera (S11-10, US-04).
 
 GET /sala-espera no tiene token, así que el backend fija `app.rol = 'sala_espera'`
-(app/db.py: get_conn_sala_espera). Este contexto solo puede LEER las tres tablas que
+(app/db.py: get_conn_sala_espera). Este contexto solo puede LEER las dos tablas que
 necesita para ordenar la fila:
 
 - episodio_triage   (estado y hora de ingreso)
-- clasificacion_ia  (nivel sugerido por la IA)
-- decision_clinica  (nivel final)
+- decision_clinica  (nivel ESI confirmado por enfermería)
 
 No recibe permisos sobre paciente, contacto_paciente, contacto_emergencia,
-consentimiento, usuario_staff, signos_vitales, sintomas_triage ni registro_auditoria:
-con app.rol = 'sala_espera' esas tablas devuelven cero filas.
+consentimiento, usuario_staff, signos_vitales, sintomas_triage, clasificacion_ia ni
+registro_auditoria: con app.rol = 'sala_espera' esas tablas devuelven cero filas.
+La sugerencia de la IA no se publica: solo el nivel que validó un profesional.
 
 Las políticas nuevas son PERMISSIVE y se suman (OR) a las de la 0008, que no se tocan.
 
@@ -28,7 +28,9 @@ depends_on: Union[str, Sequence[str], None] = None
 
 APP_ROLE = "meditriage_app"
 CONTEXTO = "sala_espera"
-TABLAS = ("episodio_triage", "clasificacion_ia", "decision_clinica")
+TABLAS = ("episodio_triage", "decision_clinica")
+# Para el downgrade: una versión anterior de esta migración también abría clasificacion_ia.
+TABLAS_DOWNGRADE = ("episodio_triage", "clasificacion_ia", "decision_clinica")
 
 
 def upgrade() -> None:
@@ -41,5 +43,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    for t in TABLAS:
+    for t in TABLAS_DOWNGRADE:
         op.execute(f"DROP POLICY IF EXISTS {t}_select_sala_espera ON {t}")

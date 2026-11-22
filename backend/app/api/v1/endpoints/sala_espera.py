@@ -1,8 +1,10 @@
 """GET /sala-espera: pantalla pública de la sala de espera (S11-10, US-04).
 
 No pide token: la ve cualquiera en la sala. Por eso:
-- la conexión usa el contexto RLS `sala_espera`, que solo puede leer episodio_triage,
-  clasificacion_ia y decision_clinica (migración 0013): ni paciente, ni contactos, ni RUT;
+- la conexión usa el contexto RLS `sala_espera`, que solo puede leer episodio_triage y
+  decision_clinica (migración 0013): ni paciente, ni contactos, ni RUT, ni la sugerencia de la IA;
+- solo se muestra el nivel ESI CONFIRMADO por enfermería: la sugerencia de la IA es una
+  recomendación y no se publica hasta que un profesional la valida ("En evaluación");
 - la consulta no lee nombre, RUT, paciente_id ni motivo de consulta, y la respuesta no
   lleva episodio_id: solo un turno anonimizado (letra del día + correlativo de llegada,
   ej. "A-12"; la letra cambia cada día para que no se repitan turnos de días distintos);
@@ -28,7 +30,7 @@ from app.schemas.sala_espera import (
 
 router = APIRouter()
 
-# Nivel vigente: el final si la enfermera ya decidió; si no, el último sugerido por la IA.
+# Nivel: solo el final que confirmó enfermería (decision_clinica). Sin decisión, nulo.
 # El turno se numera con TODOS los episodios del día (también los cerrados), así el número
 # de un paciente no cambia cuando otros terminan su atención.
 _SALA_ESPERA = """
@@ -37,16 +39,9 @@ _SALA_ESPERA = """
             e.episodio_id,
             e.estado,
             e.fecha_hora_ingreso,
-            COALESCE(dc.nivel_esi_final, cia.nivel_esi_sugerido) AS nivel_esi,
+            dc.nivel_esi_final AS nivel_esi,
             ((e.fecha_hora_ingreso AT TIME ZONE 'UTC') AT TIME ZONE %(zona)s)::date AS dia
         FROM episodio_triage e
-        LEFT JOIN LATERAL (
-            SELECT nivel_esi_sugerido
-            FROM clasificacion_ia
-            WHERE episodio_id = e.episodio_id
-            ORDER BY tiempo_respuesta DESC NULLS LAST
-            LIMIT 1
-        ) cia ON TRUE
         LEFT JOIN decision_clinica dc ON dc.episodio_id = e.episodio_id
         WHERE e.estado = ANY(%(estados)s)
           AND e.fecha_hora_ingreso IS NOT NULL
@@ -110,7 +105,8 @@ _SALA_ESPERA = """
     summary="Vista pública de la sala de espera",
     description=(
         "Pantalla pública (sin token). Turnos anonimizados de los episodios en espera y en "
-        "atención, ordenados por prioridad ESI, con su posición y el tiempo estimado por "
+        "atención, ordenados por el nivel ESI confirmado por enfermería, con su posición y el "
+        "tiempo estimado por "
         "categoría. Nunca incluye RUT, nombre, patient_id ni episodio_id."
     ),
     dependencies=[Depends(limite_sala_espera)],
