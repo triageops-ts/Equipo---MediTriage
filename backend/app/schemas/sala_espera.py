@@ -44,10 +44,11 @@ class SalaEsperaEntry(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     turno: str = Field(pattern=r"^[A-Z]-[0-9]+$", description="Turno anonimizado, ej. A-12.")
-    nivel_esi: Optional[int] = Field(default=None, ge=1, le=5)
+    # Siempre confirmado por enfermería: sin decisión el turno no aparece en la sala.
+    nivel_esi: int = Field(ge=1, le=5)
     estado: EstadoEpisodio
     posicion: Optional[int] = Field(
         default=None, ge=1, description="Lugar en la fila. Nulo si ya está en atención."
     )
     minutos_espera: int = Field(ge=0)
-    tiempo_estimado_min: Optional[int] = Field(default=None, ge=0)
+    tiempo_estimado_min: int = Field(ge=0)

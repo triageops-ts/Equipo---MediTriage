@@ -36,11 +36,11 @@ EPISODIOS = [
     ("t4", 1, 1, "en_espera"),        # 4
     ("t5", 2, 2, "cerrado"),          # 5: no aparece, pero ocupa su número
     ("t6", 2, 2, "en_espera"),        # 6
-    ("t7", 1, None, "en_espera"),     # 7: la IA sugirió ESI 1 pero nadie confirmó -> sin nivel
+    ("t7", 1, None, "en_espera"),     # 7: la IA sugirió ESI 1 pero nadie confirmó -> no aparece
 ]
 
-# Escrito a mano: ESI 1 primero y, a igual nivel, el que llegó antes. Sin nivel, al final.
-ORDEN_ESPERADO = [2, 4, 1, 3, 6, 7]
+# Escrito a mano: ESI 1 primero y, a igual nivel, el que llegó antes.
+ORDEN_ESPERADO = [2, 4, 1, 3, 6]
 
 
 def _admin():
@@ -120,13 +120,13 @@ def test_nivel_vigente_y_estado(sala_de_prueba):
     assert fila[3]["estado"] == "en_atencion"
     assert fila[3]["posicion"] is None
     # Todos llevan años esperando: ya cumplieron el objetivo de su categoría.
-    assert all(fila[n]["tiempo_estimado_min"] == 0 for n in (1, 2, 3, 4, 6))
+    assert all(f["tiempo_estimado_min"] == 0 for f in fila.values())
 
 
-def test_sugerencia_de_la_ia_sin_confirmar_no_se_publica(sala_de_prueba):
-    fila = _por_numero(_sala())
-    assert fila[7]["nivel_esi"] is None  # la IA sugirió 1, pero enfermería no confirmó
-    assert fila[7]["tiempo_estimado_min"] is None
+def test_sin_esi_confirmado_no_aparece(sala_de_prueba):
+    # La IA sugirió ESI 1, pero enfermería no confirmó: el turno 7 no se publica.
+    assert 7 not in _por_numero(_sala())
+    assert all(f["nivel_esi"] is not None for f in _sala())
 
 
 def test_posiciones_consecutivas_en_el_orden_de_la_lista(sala_de_prueba):
@@ -141,7 +141,7 @@ def test_posiciones_consecutivas_en_el_orden_de_la_lista(sala_de_prueba):
 
 def test_toda_la_lista_respeta_la_prioridad(sala_de_prueba):
     sala = _sala()
-    claves = [(f["nivel_esi"] is None, f["nivel_esi"] or 0, -f["minutos_espera"]) for f in sala]
+    claves = [(f["nivel_esi"], -f["minutos_espera"]) for f in sala]
     assert claves == sorted(claves)
     assert len(sala) <= 100
 

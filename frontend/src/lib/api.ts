@@ -142,14 +142,14 @@ export interface ColaTriageItem {
 export interface SalaEsperaEntry {
   /** Letra del día + correlativo de llegada, p. ej. "A-12". La letra cambia cada día. */
   turno: string;
-  /** Nivel confirmado por enfermería. Nulo mientras no se confirma (la IA no se publica). */
-  nivel_esi: EsiLevel | null;
+  /** Nivel confirmado por enfermería (sin confirmar, el turno no aparece en la sala). */
+  nivel_esi: EsiLevel;
   estado: EstadoEpisodio;
   /** Lugar en la fila (1 = el próximo). Nulo si ya está en atención. */
   posicion: number | null;
   minutos_espera: number;
-  /** Minutos que le quedan según el objetivo de su categoría. Nulo sin nivel ESI. */
-  tiempo_estimado_min: number | null;
+  /** Minutos que le quedan según el objetivo de su categoría. */
+  tiempo_estimado_min: number;
 }
 
 export interface FiltrosCola {

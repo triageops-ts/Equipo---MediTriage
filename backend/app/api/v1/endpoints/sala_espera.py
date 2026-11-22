@@ -3,8 +3,8 @@
 No pide token: la ve cualquiera en la sala. Por eso:
 - la conexión usa el contexto RLS `sala_espera`, que solo puede leer episodio_triage y
   decision_clinica (migración 0013): ni paciente, ni contactos, ni RUT, ni la sugerencia de la IA;
-- solo se muestra el nivel ESI CONFIRMADO por enfermería: la sugerencia de la IA es una
-  recomendación y no se publica hasta que un profesional la valida ("En evaluación");
+- solo aparecen los turnos con nivel ESI CONFIRMADO por enfermería: mientras el paciente
+  está en evaluación (o solo tiene la sugerencia de la IA) no se publica nada de él;
 - la consulta no lee nombre, RUT, paciente_id ni motivo de consulta, y la respuesta no
   lleva episodio_id: solo un turno anonimizado (letra del día + correlativo de llegada,
   ej. "A-12"; la letra cambia cada día para que no se repitan turnos de días distintos);
@@ -30,7 +30,8 @@ from app.schemas.sala_espera import (
 
 router = APIRouter()
 
-# Nivel: solo el final que confirmó enfermería (decision_clinica). Sin decisión, nulo.
+# Nivel: solo el final que confirmó enfermería (decision_clinica). Sin decisión, el episodio
+# no entra a la sala (sigue en evaluación con la enfermera).
 # El turno se numera con TODOS los episodios del día (también los cerrados), así el número
 # de un paciente no cambia cuando otros terminan su atención.
 _SALA_ESPERA = """
@@ -45,6 +46,7 @@ _SALA_ESPERA = """
         LEFT JOIN decision_clinica dc ON dc.episodio_id = e.episodio_id
         WHERE e.estado = ANY(%(estados)s)
           AND e.fecha_hora_ingreso IS NOT NULL
+          AND dc.nivel_esi_final IS NOT NULL
     ),
     turnos AS (
         SELECT
@@ -80,7 +82,7 @@ _SALA_ESPERA = """
             )::int AS minutos_espera,
             row_number() OVER (
                 PARTITION BY a.estado
-                ORDER BY a.nivel_esi ASC NULLS LAST, a.fecha_hora_ingreso ASC, a.episodio_id ASC
+                ORDER BY a.nivel_esi ASC, a.fecha_hora_ingreso ASC, a.episodio_id ASC
             ) AS lugar
         FROM activos a
         JOIN turnos t ON t.episodio_id = a.episodio_id
@@ -93,7 +95,7 @@ _SALA_ESPERA = """
         CASE WHEN estado = 'en_espera' THEN lugar END AS posicion,
         minutos_espera
     FROM ordenados
-    ORDER BY nivel_esi ASC NULLS LAST, fecha_hora_ingreso ASC, episodio_id ASC
+    ORDER BY nivel_esi ASC, fecha_hora_ingreso ASC, episodio_id ASC
     LIMIT %(limit)s
 """
 
@@ -105,8 +107,8 @@ _SALA_ESPERA = """
     summary="Vista pública de la sala de espera",
     description=(
         "Pantalla pública (sin token). Turnos anonimizados de los episodios en espera y en "
-        "atención, ordenados por el nivel ESI confirmado por enfermería, con su posición y el "
-        "tiempo estimado por "
+        "atención que ya tienen nivel ESI confirmado por enfermería, ordenados por ese nivel, "
+        "con su posición y el tiempo estimado por "
         "categoría. Nunca incluye RUT, nombre, patient_id ni episodio_id."
     ),
     dependencies=[Depends(limite_sala_espera)],

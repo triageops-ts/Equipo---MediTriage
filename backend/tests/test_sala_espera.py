@@ -30,7 +30,7 @@ FILAS = [
     ("A", 12, 2, "en_atencion", None, 9),
     ("A", 15, 3, "en_espera", 1, 20),
     ("A", 16, 3, "en_espera", 2, 75),
-    ("B", 18, None, "en_espera", 3, 4),
+    ("B", 18, 5, "en_espera", 3, 4),
 ]
 
 
@@ -101,9 +101,8 @@ def test_turno_y_tiempos(conexion_falsa):
     # ESI 3 (objetivo 60): 20 esperados -> faltan 40; 75 esperados -> 0 (ya cumplió).
     assert filas[1]["tiempo_estimado_min"] == 40
     assert filas[2]["tiempo_estimado_min"] == 0
-    # Sin nivel ESI todavía: no hay estimación.
-    assert filas[3]["nivel_esi"] is None
-    assert filas[3]["tiempo_estimado_min"] is None
+    # ESI 5 (objetivo 180): 4 esperados -> faltan 176.
+    assert filas[3]["tiempo_estimado_min"] == 176
 
 
 def test_respeta_el_orden_de_la_consulta(conexion_falsa):
@@ -185,4 +184,15 @@ def test_esquema_rechaza_campos_extra():
 
 def test_esquema_rechaza_turno_mal_formado():
     with pytest.raises(ValidationError):
-        SalaEsperaEntry(turno="Ana Soto", estado="en_espera", minutos_espera=0)
+        SalaEsperaEntry(
+            turno="Ana Soto", nivel_esi=3, estado="en_espera", minutos_espera=0,
+            tiempo_estimado_min=60,
+        )
+
+
+def test_esquema_exige_nivel_confirmado():
+    with pytest.raises(ValidationError):
+        SalaEsperaEntry(
+            turno="A-1", nivel_esi=None, estado="en_espera", minutos_espera=0,
+            tiempo_estimado_min=None,
+        )
