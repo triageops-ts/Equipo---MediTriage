@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.core.realtime import cerrar_cliente_redis
 
-from app.api.v1.endpoints import auth, health, patients, triage, ws
+from app.api.v1.endpoints import auth, health, patients, sala_espera, triage, ws
 from app.core.auth import usuario_actual
 from app.core.canary import verificar_clave_cifrado
 from app.core.logging_config import configure_logging, request_id_var, ruta_sin_parametros
@@ -72,6 +72,9 @@ configurar_seguridad_http(app)
 # ademÃ¡s cada endpoint indica quÃ© roles puede usarlo (app/core/auth.py: requiere_rol).
 app.include_router(health.router, prefix="/api/v1")
 app.include_router(auth.router, prefix="/api/v1")
+# S11-10: pantalla pública de la sala de espera. Sin token a propósito; trae su propio
+# límite por IP y su contexto RLS (sala_espera) que no ve datos personales.
+app.include_router(sala_espera.router, prefix="/api/v1")
 app.include_router(patients.router, prefix="/api/v1", dependencies=[Depends(usuario_actual)])
 # /triage/* lleva además un límite de peticiones por usuario (429 al superarlo).
 app.include_router(

@@ -135,11 +135,21 @@ export interface ColaTriageItem {
   minutos_espera: number;
 }
 
+/**
+ * Fila de la pantalla pública (GET /sala-espera, sin login). Solo turno anonimizado:
+ * nunca RUT, nombre, patient_id ni episodio_id.
+ */
 export interface SalaEsperaEntry {
-  episodio_id: string;
-  posicion: number;
+  /** Correlativo de llegada del día, p. ej. "A-12". */
+  turno: string;
+  /** Nivel vigente (final o, si no hay, el sugerido). Nulo si aún no se evalúa. */
+  nivel_esi: EsiLevel | null;
   estado: EstadoEpisodio;
+  /** Lugar en la fila (1 = el próximo). Nulo si ya está en atención. */
+  posicion: number | null;
   minutos_espera: number;
+  /** Minutos que le quedan según el objetivo de su categoría. Nulo sin nivel ESI. */
+  tiempo_estimado_min: number | null;
 }
 
 export interface FiltrosCola {
@@ -350,9 +360,9 @@ export function obtenerCola(filtros: FiltrosCola = {}): Promise<ColaTriageItem[]
   return pedir(conQuery(RUTAS.cola, { ...filtros }));
 }
 
-/** GET /sala-espera */
-export function obtenerSalaEspera(): Promise<SalaEsperaEntry[]> {
-  return pedir(RUTAS.salaEspera);
+/** GET /sala-espera (público: no envía ni necesita sesión). */
+export function obtenerSalaEspera(init?: RequestInit): Promise<SalaEsperaEntry[]> {
+  return pedir(RUTAS.salaEspera, { credentials: "omit", ...init });
 }
 
 /** GET /audit-logs */

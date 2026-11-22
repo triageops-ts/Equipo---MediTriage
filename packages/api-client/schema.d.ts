@@ -196,8 +196,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Vista de la sala de espera
-         * @description Devuelve los episodios en estado `en_espera` con su posición y su tiempo de espera, sin nivel ESI, sin datos clínicos y sin datos personales. Es la vista administrativa de admisión.
+         * Vista pública de la sala de espera
+         * @description Pantalla pública del monitor de la sala de espera (US-04). No requiere token. Devuelve los episodios abiertos (`en_espera` y `en_atencion`) ordenados por prioridad: nivel ESI más urgente primero y, a igual nivel, el que lleva más tiempo esperando; los episodios aún sin nivel ESI van al final. Cada fila lleva solo un turno anonimizado (correlativo diario de llegada, ej. `A-12`), el nivel ESI vigente, el estado, la posición en la fila y los tiempos. Nunca incluye RUT, nombre, patient_id ni episodio_id. Límite de peticiones por IP (por defecto 120 por minuto).
          */
         get: operations["getWaitingRoom"];
         put?: never;
@@ -481,13 +481,31 @@ export interface components {
             fecha_hora_ingreso: string;
             minutos_espera: number;
         };
-        /** @description Fila de la sala de espera. No incluye datos clínicos ni personales. */
+        /** @description Fila de la pantalla pública de la sala de espera. Solo lleva el turno anonimizado, el nivel ESI y tiempos: nunca RUT, nombre, patient_id ni episodio_id. */
         SalaEsperaEntry: {
-            /** Format: uuid */
-            episodio_id: string;
-            posicion: number;
+            /**
+             * @description Turno anonimizado. Correlativo de llegada del día (hora de Chile).
+             * @example A-12
+             */
+            turno: string;
+            /**
+             * @description Nivel ESI vigente (el final si ya hay decisión; si no, el sugerido). Nulo si aún no se evalúa.
+             * @example 2
+             */
+            nivel_esi: number | null;
             estado: components["schemas"]["EstadoEpisodio"];
+            /**
+             * @description Lugar en la fila de espera (1 = el próximo en ser llamado). Nulo si ya está en atención.
+             * @example 3
+             */
+            posicion: number | null;
+            /** @description Minutos desde el ingreso. */
             minutos_espera: number;
+            /**
+             * @description Minutos estimados que le quedan por esperar según el tiempo objetivo de su categoría ESI (1 inmediato, 2 hasta 15, 3 hasta 60, 4 hasta 120, 5 hasta 180) menos lo que ya esperó. 0 si ya está en atención o si ya cumplió el objetivo. Nulo si aún no tiene nivel ESI.
+             * @example 40
+             */
+            tiempo_estimado_min: number | null;
         };
         /** @description Registro de la bitácora inmutable (tabla registro_auditoria), encadenado con hashes. */
         AuditLogEntry: {
@@ -638,7 +656,7 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
-        /** @description Se superó el límite de peticiones (S11-1). En `/auth/login` el límite es por IP (por defecto 10 por minuto); en `/triage/*`, por usuario autenticado (por defecto 120 por minuto). Los intentos de login fallidos también cuentan. El header `Retry-After` indica cuántos segundos esperar antes de reintentar. */
+        /** @description Se superó el límite de peticiones (S11-1). En `/auth/login` el límite es por IP (por defecto 10 por minuto); en `/triage/*`, por usuario autenticado (por defecto 120 por minuto); en `/sala-espera`, por IP (por defecto 120 por minuto). Los intentos de login fallidos también cuentan. El header `Retry-After` indica cuántos segundos esperar antes de reintentar. */
         TooManyRequests: {
             headers: {
                 /** @description Segundos que hay que esperar antes de volver a intentar. */
@@ -987,7 +1005,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Episodios en espera */
+            /** @description Turnos de la sala de espera, ordenados por prioridad */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -996,8 +1014,7 @@ export interface operations {
                     "application/json": components["schemas"]["SalaEsperaEntry"][];
                 };
             };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
+            429: components["responses"]["TooManyRequests"];
             500: components["responses"]["InternalServerError"];
         };
     };

@@ -1,7 +1,8 @@
-"""Límite de peticiones (rate limiting) para /auth/login y /triage/* (S11-1).
+"""Límite de peticiones (rate limiting) para /auth/login, /triage/* (S11-1) y /sala-espera (S11-10).
 
 - /auth/login: por IP del cliente (todavía no hay usuario). Frena la fuerza bruta de contraseñas.
 - /triage/*:   por usuario del token (varios enfermeros pueden compartir la IP del hospital).
+- /sala-espera: por IP (es pública). Un monitor que consulta cada 5 s hace 12 por minuto.
 
 Al superar el límite se responde 429 con el header `Retry-After` (segundos) y el cuerpo
 problem+json de siempre (lo arma el manejador de HTTPException de app/main.py).
@@ -10,6 +11,7 @@ Configuración (variables de entorno, se leen en cada petición):
     RATE_LIMIT_ENABLED   "false" lo desactiva (por ejemplo, para pruebas de carga). Por defecto activo.
     RATE_LIMIT_LOGIN     por defecto "10/minute"
     RATE_LIMIT_TRIAGE    por defecto "120/minute"
+    RATE_LIMIT_SALA_ESPERA por defecto "120/minute"
     TRUSTED_PROXY_HOPS   cuántos proxies de confianza hay delante (Ingress, rewrite de Next).
                          0 (por defecto): se usa la IP de la conexión y se ignora X-Forwarded-For,
                          porque el cliente puede escribir ese header a mano.
@@ -35,6 +37,7 @@ logger = logging.getLogger("meditriage.rate_limit")
 
 LIMITE_LOGIN_POR_DEFECTO = "10/minute"
 LIMITE_TRIAGE_POR_DEFECTO = "120/minute"
+LIMITE_SALA_ESPERA_POR_DEFECTO = "120/minute"
 
 _PERIODOS = {"second": 1, "minute": 60, "hour": 3600, "day": 86400}
 
@@ -147,4 +150,14 @@ def limite_triage(usuario: Usuario = Depends(usuario_actual)) -> None:
     """Dependencia del router /triage: límite por usuario autenticado."""
     _aplicar(
         "triage", f"usuario:{usuario.usuario_id}", "RATE_LIMIT_TRIAGE", LIMITE_TRIAGE_POR_DEFECTO
+    )
+
+
+def limite_sala_espera(request: Request) -> None:
+    """Dependencia de GET /sala-espera (pública): límite por IP."""
+    _aplicar(
+        "sala_espera",
+        f"ip:{ip_cliente(request)}",
+        "RATE_LIMIT_SALA_ESPERA",
+        LIMITE_SALA_ESPERA_POR_DEFECTO,
     )
