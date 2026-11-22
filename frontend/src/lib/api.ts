@@ -140,7 +140,7 @@ export interface ColaTriageItem {
  * nunca RUT, nombre, patient_id ni episodio_id.
  */
 export interface SalaEsperaEntry {
-  /** Correlativo de llegada del día, p. ej. "A-12". */
+  /** Letra del día + correlativo de llegada, p. ej. "A-12". La letra cambia cada día. */
   turno: string;
   /** Nivel vigente (final o, si no hay, el sugerido). Nulo si aún no se evalúa. */
   nivel_esi: EsiLevel | null;

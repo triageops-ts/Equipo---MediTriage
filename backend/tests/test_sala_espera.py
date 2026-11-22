@@ -25,12 +25,12 @@ URL = "/api/v1/sala-espera"
 CAMPOS = {"turno", "nivel_esi", "estado", "posicion", "minutos_espera", "tiempo_estimado_min"}
 UUID_RE = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.I)
 
-# (numero, nivel_esi, estado, posicion, minutos_espera), como las devuelve la consulta.
+# (letra, numero, nivel_esi, estado, posicion, minutos_espera), como las devuelve la consulta.
 FILAS = [
-    (12, 2, "en_atencion", None, 9),
-    (15, 3, "en_espera", 1, 20),
-    (16, 3, "en_espera", 2, 75),
-    (18, None, "en_espera", 3, 4),
+    ("A", 12, 2, "en_atencion", None, 9),
+    ("A", 15, 3, "en_espera", 1, 20),
+    ("A", 16, 3, "en_espera", 2, 75),
+    ("B", 18, None, "en_espera", 3, 4),
 ]
 
 
@@ -94,7 +94,7 @@ def test_solo_campos_del_contrato_sin_ids(conexion_falsa):
 
 def test_turno_y_tiempos(conexion_falsa):
     filas = client.get(URL).json()
-    assert [f["turno"] for f in filas] == ["A-12", "A-15", "A-16", "A-18"]
+    assert [f["turno"] for f in filas] == ["A-12", "A-15", "A-16", "B-18"]
     # En atención: 0 y sin posición.
     assert filas[0]["posicion"] is None
     assert filas[0]["tiempo_estimado_min"] == 0
@@ -142,8 +142,8 @@ def test_solo_get(conexion_falsa):
 
 
 def test_formatear_turno():
-    assert formatear_turno(1) == "A-1"
-    assert formatear_turno(127) == "A-127"
+    assert formatear_turno("A", 1) == "A-1"
+    assert formatear_turno("Z", 127) == "Z-127"
 
 
 @pytest.mark.parametrize(

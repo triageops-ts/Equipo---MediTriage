@@ -11,9 +11,6 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.cola import EstadoEpisodio
 
-# Letra del turno. El número es el correlativo de llegada del día.
-PREFIJO_TURNO = "A"
-
 # El día del correlativo se cuenta en hora de Chile (la columna guarda UTC sin zona).
 ZONA_HORARIA_TURNOS = "America/Santiago"
 
@@ -25,8 +22,9 @@ MAX_FILAS_SALA = 100
 TIEMPO_OBJETIVO_MIN: dict[int, int] = {1: 0, 2: 15, 3: 60, 4: 120, 5: 180}
 
 
-def formatear_turno(numero: int) -> str:
-    return f"{PREFIJO_TURNO}-{numero}"
+def formatear_turno(letra: str, numero: int) -> str:
+    """Letra del día (A..Z, la calcula la consulta) y correlativo de llegada: "A-12"."""
+    return f"{letra}-{numero}"
 
 
 def tiempo_estimado(nivel_esi: Optional[int], estado: str, minutos_espera: int) -> Optional[int]:

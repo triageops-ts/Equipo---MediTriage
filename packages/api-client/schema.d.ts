@@ -197,7 +197,7 @@ export interface paths {
         };
         /**
          * Vista pública de la sala de espera
-         * @description Pantalla pública del monitor de la sala de espera (US-04). No requiere token. Devuelve los episodios abiertos (`en_espera` y `en_atencion`) ordenados por prioridad: nivel ESI más urgente primero y, a igual nivel, el que lleva más tiempo esperando; los episodios aún sin nivel ESI van al final. Cada fila lleva solo un turno anonimizado (correlativo diario de llegada, ej. `A-12`), el nivel ESI vigente, el estado, la posición en la fila y los tiempos. Nunca incluye RUT, nombre, patient_id ni episodio_id. Límite de peticiones por IP (por defecto 120 por minuto).
+         * @description Pantalla pública del monitor de la sala de espera (US-04). No requiere token. Devuelve los episodios abiertos (`en_espera` y `en_atencion`) ordenados por prioridad: nivel ESI más urgente primero y, a igual nivel, el que lleva más tiempo esperando; los episodios aún sin nivel ESI van al final. Cada fila lleva solo un turno anonimizado (letra del día y correlativo de llegada, ej. `A-12`), el nivel ESI vigente, el estado, la posición en la fila y los tiempos. Nunca incluye RUT, nombre, patient_id ni episodio_id. Límite de peticiones por IP (por defecto 120 por minuto).
          */
         get: operations["getWaitingRoom"];
         put?: never;
@@ -484,7 +484,7 @@ export interface components {
         /** @description Fila de la pantalla pública de la sala de espera. Solo lleva el turno anonimizado, el nivel ESI y tiempos: nunca RUT, nombre, patient_id ni episodio_id. */
         SalaEsperaEntry: {
             /**
-             * @description Turno anonimizado. Correlativo de llegada del día (hora de Chile).
+             * @description Turno anonimizado: letra del día (A a Z, cambia cada día y se repite cada 26 días) y correlativo de llegada del día (hora de Chile).
              * @example A-12
              */
             turno: string;

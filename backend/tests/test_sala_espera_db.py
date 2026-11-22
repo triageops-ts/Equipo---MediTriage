@@ -4,6 +4,9 @@ Se omite sin DATABASE_URL y APP_ENCRYPTION_KEY. La base tiene episodios de otras
 así que los de esta prueba se crean en un día viejo y al azar: son los únicos de ese día
 (turnos A-1, A-2, ...) y los únicos con más de un millón de minutos de espera, lo que
 permite reconocerlos sin que la respuesta traiga episodio_id.
+
+La letra del turno depende del día, así que las pruebas comparan solo el número y
+revisan que todos los turnos propios compartan la misma letra.
 """
 import os
 import random
@@ -23,7 +26,7 @@ URL = "/api/v1/sala-espera"
 MUY_ANTIGUO = 1_000_000  # minutos; los episodios de otras pruebas esperan mucho menos
 
 # etiqueta: (nivel sugerido, nivel final, estado). El orden de la lista es el de llegada,
-# así que el turno esperado es A-1, A-2, ... en este orden.
+# así que el número de turno esperado es 1, 2, ... en este orden (la letra es la del día).
 EPISODIOS = [
     ("t1", 2, None, "en_espera"),     # A-1
     ("t2", 3, 1, "en_espera"),        # A-2: la enfermera subió la urgencia -> ESI 1
@@ -34,7 +37,7 @@ EPISODIOS = [
 ]
 
 # Escrito a mano: ESI 1 primero y, a igual nivel, el que llegó antes.
-ORDEN_ESPERADO = ["A-2", "A-4", "A-1", "A-3", "A-6"]
+ORDEN_ESPERADO = [2, 4, 1, 3, 6]
 
 
 def _admin():
@@ -84,15 +87,30 @@ def _propios(sala: list[dict]) -> list[dict]:
     return [f for f in sala if f["minutos_espera"] > MUY_ANTIGUO]
 
 
+def _numero(turno: str) -> int:
+    return int(turno.split("-")[1])
+
+
+def _por_numero(sala: list[dict]) -> dict[int, dict]:
+    return {_numero(f["turno"]): f for f in _propios(sala)}
+
+
 def test_orden_turnos_y_cerrado_fuera(sala_de_prueba):
-    assert [f["turno"] for f in _propios(_sala())] == ORDEN_ESPERADO
+    propios = _propios(_sala())
+    assert [_numero(f["turno"]) for f in propios] == ORDEN_ESPERADO
+    assert len({f["turno"].split("-")[0] for f in propios}) == 1  # misma letra: mismo día
+
+
+def test_turnos_no_se_repiten(sala_de_prueba):
+    turnos = [f["turno"] for f in _sala()]
+    assert len(turnos) == len(set(turnos))
 
 
 def test_nivel_vigente_y_estado(sala_de_prueba):
-    fila = {f["turno"]: f for f in _propios(_sala())}
-    assert fila["A-2"]["nivel_esi"] == 1  # nivel final, no el sugerido (3)
-    assert fila["A-3"]["estado"] == "en_atencion"
-    assert fila["A-3"]["posicion"] is None
+    fila = _por_numero(_sala())
+    assert fila[2]["nivel_esi"] == 1  # nivel final, no el sugerido (3)
+    assert fila[3]["estado"] == "en_atencion"
+    assert fila[3]["posicion"] is None
     # Todos llevan años esperando: ya cumplieron el objetivo de su categoría.
     assert all(f["tiempo_estimado_min"] == 0 for f in fila.values())
 
@@ -103,8 +121,8 @@ def test_posiciones_consecutivas_en_el_orden_de_la_lista(sala_de_prueba):
     assert posiciones == list(range(1, len(posiciones) + 1))
     assert all(f["posicion"] is None for f in sala if f["estado"] == "en_atencion")
     # Los ESI 1 de la prueba son los que más esperan: van primeros en la fila.
-    fila = {f["turno"]: f for f in _propios(sala)}
-    assert (fila["A-2"]["posicion"], fila["A-4"]["posicion"]) == (1, 2)
+    fila = _por_numero(sala)
+    assert (fila[2]["posicion"], fila[4]["posicion"]) == (1, 2)
 
 
 def test_toda_la_lista_respeta_la_prioridad(sala_de_prueba):

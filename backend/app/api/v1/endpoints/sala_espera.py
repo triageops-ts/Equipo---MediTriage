@@ -4,7 +4,8 @@ No pide token: la ve cualquiera en la sala. Por eso:
 - la conexión usa el contexto RLS `sala_espera`, que solo puede leer episodio_triage,
   clasificacion_ia y decision_clinica (migración 0013): ni paciente, ni contactos, ni RUT;
 - la consulta no lee nombre, RUT, paciente_id ni motivo de consulta, y la respuesta no
-  lleva episodio_id: solo un turno anonimizado (correlativo de llegada del día, ej. "A-12");
+  lleva episodio_id: solo un turno anonimizado (letra del día + correlativo de llegada,
+  ej. "A-12"; la letra cambia cada día para que no se repitan turnos de días distintos);
 - tiene límite de peticiones por IP (429 al superarlo).
 
 Orden: el mismo de la cola clínica (S10-3). ESI 1 arriba; a igual nivel, el que lleva más
@@ -53,6 +54,8 @@ _SALA_ESPERA = """
     turnos AS (
         SELECT
             d.episodio_id,
+            -- Letra del día (A..Z, rota cada 26 días): dos días distintos no comparten turno.
+            chr(65 + ((d.dia - DATE '2000-01-01') %% 26)) AS letra,
             row_number() OVER (
                 PARTITION BY d.dia ORDER BY d.fecha_hora_ingreso, d.episodio_id
             ) AS numero
@@ -68,6 +71,7 @@ _SALA_ESPERA = """
     ),
     ordenados AS (
         SELECT
+            t.letra,
             t.numero,
             a.nivel_esi,
             a.estado,
@@ -85,6 +89,7 @@ _SALA_ESPERA = """
         JOIN turnos t ON t.episodio_id = a.episodio_id
     )
     SELECT
+        letra,
         numero,
         nivel_esi,
         estado,
@@ -128,9 +133,9 @@ def sala_espera(
     return [construir_fila(*fila) for fila in filas]
 
 
-def construir_fila(numero, nivel_esi, estado, posicion, minutos_espera) -> SalaEsperaEntry:
+def construir_fila(letra, numero, nivel_esi, estado, posicion, minutos_espera) -> SalaEsperaEntry:
     return SalaEsperaEntry(
-        turno=formatear_turno(numero),
+        turno=formatear_turno(letra, numero),
         nivel_esi=nivel_esi,
         estado=estado,
         posicion=posicion,
