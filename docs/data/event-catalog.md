@@ -156,7 +156,7 @@ Catálogo de eventos de dominio para la arquitectura orientada a eventos de Medi
     "token_correlacion_efimero": "tok_sec_abc123",
     "nivel_esi_sugerido": 2,
     "justificacion": "Riesgo cardiovascular elevado por taquicardia y desaturacion leve.",
-    "modelo_usado": "claude-3-5-sonnet",
+    "modelo_usado": "claude-haiku-5-5",
     "latencia_ms": 1250,
     "fecha_hora_solicitud": "2026-10-06T20:06:05Z"
   }

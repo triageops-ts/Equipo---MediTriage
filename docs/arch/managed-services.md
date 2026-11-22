@@ -10,5 +10,5 @@ En alineación con el Diagrama C4 Nivel 2 del proyecto MediTriage, se identifica
 | **Caché / Mensajería** | **Upstash Redis / Redis Cloud** | Instancia gestionada de Redis optimizada para Pub/Sub y manejo de sesiones en tiempo real, garantizando la emisión de actualizaciones en vivo vía WSS. |
 
 ## Criterios Integrados
-* **Inferencia IA:** La orquestación corre en el Backend mediante LangChain hacia la API externa de Anthropic (Claude 3 Haiku).
+* **Inferencia IA:** La orquestación corre en el Backend mediante LangChain hacia la API externa de Anthropic (Claude Haiku 5.5, `claude-haiku-5-5`; ver `docs/ia/motor-ia.md`).
 * **Seguridad:** Conexiones cifradas hacia PostgreSQL mediante SSL/TLS (`sslmode=require`).
