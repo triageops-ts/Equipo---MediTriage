@@ -41,3 +41,13 @@ Se utilizará **pytest** como herramienta principal para las pruebas del backend
 **Criterio de aceptación:** los componentes deben intercambiar información correctamente, procesar solicitudes válidas y responder adecuadamente ante errores.
 
 Las pruebas que requieren servicios
+
+### Pruebas BDD y datos sintéticos (`pytest-bdd`)
+
+**Objetivo:** verificar flujos de negocio y contratos funcionales en lenguaje Gherkin apoyándose en datos sintéticos y aislamiento de base de datos.
+
+- **Fábricas de datos sintéticos:** `backend/tests/factories.py` provee generadores reutilizables para pacientes, signos vitales según nivel ESI y roles de usuario.
+- **Fixtures compartidas:** `backend/tests/bdd/conftest.py` entrega el cliente de pruebas de FastAPI (`client`), cabeceras de autenticación (`auth_headers`), conexión aislada a PostgreSQL con `rollback()` (`db_conn` y validación para no apuntar a producción) y datos sintéticos de signos vitales.
+- **Patrón de referencia (`US-02`):** el equipo puede usar [`backend/tests/bdd/us02_decision_clinica.feature`](../../backend/tests/bdd/us02_decision_clinica.feature) y [`backend/tests/bdd/test_us02_decision_clinica.py`](../../backend/tests/bdd/test_us02_decision_clinica.py) como plantilla para nuevos escenarios BDD.
+
+**Herramientas:** `pytest`, `pytest-bdd`, `FastAPI TestClient` y `psycopg`.
