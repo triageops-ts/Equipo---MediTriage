@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.core.realtime import cerrar_cliente_redis
 
-from app.api.v1.endpoints import auth, health, patients, triage, ws
+from app.api.v1.endpoints import audit_logs, auth, health, patients, triage, ws
 from app.core.auth import usuario_actual
 from app.core.canary import verificar_clave_cifrado
 from app.core.logging_config import configure_logging, request_id_var, ruta_sin_parametros
@@ -80,6 +80,8 @@ app.include_router(
     dependencies=[Depends(usuario_actual), Depends(limite_triage)],
 )
 # El WebSocket valida el token Ã©l mismo (un 401 HTTP no aplica a un canal ya abierto).
+# Auditoría: solo lectura y solo rol auditor (el router exige el rol).
+app.include_router(audit_logs.router, prefix="/api/v1")
 app.include_router(ws.router, prefix="/api/v1")
 
 @app.middleware("http")
