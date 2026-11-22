@@ -16,7 +16,7 @@ from app.schemas.triage import SignosVitalesInput
 from tests.factories import signos_vitales_por_esi
 
 FEATURE_PATH = (
-    Path(__file__).resolve().parents[2] / "docs" / "scenarios" / "US01_inferencia_ESI.feature"
+    Path(__file__).resolve().parents[3] / "docs" / "scenarios" / "US01_inferencia_ESI.feature"
 )
 
 
