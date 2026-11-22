@@ -400,9 +400,9 @@ paths:
       tags:
         - Auditoría
       summary: Historial inmutable de auditoría
-      description: Devuelve el historial de auditoría, con filtros por episodio, usuario y discrepancia entre la IA y la decisión humana. Requiere rol de auditor.
+      description: Devuelve el historial de auditoría, con filtros por episodio, usuario y discrepancia entre la IA y la decisión humana. Solo lectura, del más reciente al más antiguo. Requiere rol de auditor.
       operationId: listAuditLogs
-      x-estado: pendiente
+      x-estado: implementado
       parameters:
         - name: episodio_id
           in: query
@@ -438,6 +438,30 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '422':
           $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /audit-logs/verificacion:
+    get:
+      tags:
+        - Auditoría
+      summary: Verificar la cadena de hashes de la auditoría
+      description: >
+        Recorre la cadena de hashes de la bitácora inmutable y responde si es válida. Si no lo es,
+        indica el primer registro alterado (el más antiguo de la cadena). Solo lectura. Requiere rol de auditor.
+      operationId: verifyAuditChain
+      x-estado: implementado
+      responses:
+        '200':
+          description: Resultado de la verificación
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerificacionCadena'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -950,15 +974,21 @@ components:
           format: uuid
           nullable: true
         sugerencia_ia:
-          type: string
+          type: integer
+          minimum: 1
+          maximum: 5
           nullable: true
+          description: Nivel ESI que sugirió la IA.
         prompt_enviado:
           type: string
           nullable: true
           description: Prompt enviado a la IA. Solo lleva el token efímero y datos clínicos anonimizados, nunca datos personales.
         decision_final:
-          type: string
+          type: integer
+          minimum: 1
+          maximum: 5
           nullable: true
+          description: Nivel ESI que decidió el personal.
         hay_discrepancia:
           type: boolean
           description: True si la decisión final difiere de la sugerencia de la IA.
@@ -971,6 +1001,30 @@ components:
         fecha_hora_evento:
           type: string
           format: date-time
+
+    VerificacionCadena:
+      type: object
+      description: Resultado de recorrer la cadena de hashes de registro_auditoria.
+      required: [valida, registros_verificados]
+      properties:
+        valida:
+          type: boolean
+          description: True si ningún registro fue alterado.
+        registros_verificados:
+          type: integer
+          minimum: 0
+        primer_registro_alterado:
+          type: object
+          nullable: true
+          description: El registro más antiguo de la cadena que no cuadra. Null si la cadena es íntegra.
+          required: [registro_id, motivo]
+          properties:
+            registro_id:
+              type: string
+              format: uuid
+            motivo:
+              type: string
+              example: "hash_actual no coincide con el contenido del registro"
 
     # Formato de error estándar RFC 7807 (Problem Details for HTTP APIs)
     Problem:

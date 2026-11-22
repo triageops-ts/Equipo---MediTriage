@@ -83,6 +83,8 @@ app.include_router(
     dependencies=[Depends(usuario_actual), Depends(limite_triage)],
 )
 # El WebSocket valida el token Ã©l mismo (un 401 HTTP no aplica a un canal ya abierto).
+# Auditoría: solo lectura y solo rol auditor (el router exige el rol).
+app.include_router(audit_logs.router, prefix="/api/v1")
 app.include_router(ws.router, prefix="/api/v1")
 
 @app.middleware("http")

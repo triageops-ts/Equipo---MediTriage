@@ -18,6 +18,7 @@ export const RUTAS = {
   cola: "/api/v1/triage/cola",
   salaEspera: "/api/v1/sala-espera",
   auditLogs: "/api/v1/audit-logs",
+  auditLogsVerificacion: "/api/v1/audit-logs/verificacion",
 } as const;
 
 // --- Tipos compartidos ---
@@ -166,9 +167,9 @@ export interface AuditLogEntry {
   decision_id?: string | null;
   evento_tipo: string;
   usuario_id_actor?: string | null;
-  sugerencia_ia?: string | null;
+  sugerencia_ia?: EsiLevel | null;
   prompt_enviado?: string | null;
-  decision_final?: string | null;
+  decision_final?: EsiLevel | null;
   hay_discrepancia: boolean;
   hash_anterior: string;
   hash_actual: string;
@@ -181,6 +182,12 @@ export interface FiltrosAuditoria {
   hay_discrepancia?: boolean;
   skip?: number;
   limit?: number;
+}
+
+export interface VerificacionCadena {
+  valida: boolean;
+  registros_verificados: number;
+  primer_registro_alterado?: { registro_id: string; motivo: string } | null;
 }
 
 // --- Sistema y autenticación (GET /health, POST /auth/login) ---
@@ -368,6 +375,11 @@ export function obtenerSalaEspera(init?: RequestInit): Promise<SalaEsperaEntry[]
 /** GET /audit-logs */
 export function obtenerAuditLogs(filtros: FiltrosAuditoria = {}): Promise<AuditLogEntry[]> {
   return pedir(conQuery(RUTAS.auditLogs, { ...filtros }));
+}
+
+/** GET /audit-logs/verificacion */
+export function verificarCadenaAuditoria(): Promise<VerificacionCadena> {
+  return pedir(RUTAS.auditLogsVerificacion);
 }
 /** GET /triage/{episodio_id}/decision */
 export function obtenerDecision(
