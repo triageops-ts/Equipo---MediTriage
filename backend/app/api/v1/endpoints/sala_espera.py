@@ -55,9 +55,9 @@ _SALA_ESPERA = """
         SELECT
             d.episodio_id,
             -- Letra del día (A..Z, rota cada 26 días): dos días distintos no comparten turno.
-            -- En Postgres % puede dar negativo (días antes del 2000): se suma 26 y se vuelve
-            -- a tomar el resto para que siempre quede entre 0 y 25.
-            chr(65 + ((((d.dia - DATE '2000-01-01') %% 26) + 26) %% 26)) AS letra,
+            -- mod() puede dar negativo para días anteriores al 2000: se suma 26 y se vuelve
+            -- a aplicar mod() para que siempre quede entre 0 y 25.
+            chr(65 + mod(mod(d.dia - DATE '2000-01-01', 26) + 26, 26)) AS letra,
             row_number() OVER (
                 PARTITION BY d.dia ORDER BY d.fecha_hora_ingreso, d.episodio_id
             ) AS numero
