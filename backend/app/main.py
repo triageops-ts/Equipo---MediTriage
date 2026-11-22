@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.core.realtime import cerrar_cliente_redis
 
-from app.api.v1.endpoints import auth, health, patients, sala_espera, triage, ws
+from app.api.v1.endpoints import audit_logs, auth, health, patients, sala_espera, triage, ws
 from app.core.auth import usuario_actual
 from app.core.canary import verificar_clave_cifrado
 from app.core.logging_config import configure_logging, request_id_var, ruta_sin_parametros
