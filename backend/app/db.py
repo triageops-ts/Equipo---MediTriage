@@ -8,6 +8,9 @@ from app.core.security import Usuario
 
 # Contexto interno solo para el login (leer usuario_staff antes de conocer el rol).
 ROL_AUTENTICACION = "autenticacion"
+# Contexto interno de la pantalla pública (sin token): solo lee episodios, clasificación y
+# decisión (migración 0013). No ve paciente, contactos ni usuario_staff.
+ROL_SALA_ESPERA = "sala_espera"
 
 
 def encryption_key() -> str:
@@ -47,4 +50,11 @@ def get_conn_login():
     """Solo para /login: aún no hay token, y el rol interno solo puede leer usuario_staff."""
     with psycopg.connect(_database_url()) as conn:
         set_rls_context(conn, ROL_AUTENTICACION)
+        yield conn
+
+
+def get_conn_sala_espera():
+    """Solo para GET /sala-espera (público): el rol interno no puede leer datos personales."""
+    with psycopg.connect(_database_url()) as conn:
+        set_rls_context(conn, ROL_SALA_ESPERA)
         yield conn
