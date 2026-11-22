@@ -1,4 +1,4 @@
-"""Pruebas BDD para US-01 (S09-11): inferencia ESI asistida por IA y latencia."""
+"""Pruebas BDD para US-01 (S09-11): inferencia ESI asistida por IA y latencia."""[cite: 14, 15]
 
 from pathlib import Path
 from statistics import median
@@ -11,7 +11,7 @@ import pytest
 from pytest_bdd import given, scenario, then, when
 
 from app.ai import engine
-from app.ai.contrato import ClasificacionIA
+from app.ai.contrato import ClasificacionIA, EntradaIA
 from app.schemas.triage import SignosVitalesInput
 from tests.factories import signos_vitales_por_esi
 
@@ -92,8 +92,15 @@ def cuando_presiona_calcular_esi(estado_us01, monkeypatch):
             fallback_aplicado=False,
         ),
     )
+    entrada_prueba = EntradaIA(
+        edad_anios=30,
+        sexo_biologico="femenino",
+        signos_vitales=SignosVitalesInput(**estado_us01["signos_vitales"]),
+        sintomas=estado_us01["sintomas"],
+        motivo_consulta="Evaluación de triage",
+    )
     inicio = time.perf_counter()
-    resultado = engine.clasificar(object())
+    resultado = engine.clasificar(entrada_prueba)
     estado_us01["tiempo_s"] = time.perf_counter() - inicio
     estado_us01["resultado_ia"] = resultado
 
@@ -193,6 +200,13 @@ def entonces_registra_en_log_errores(estado_us01):
 def test_latencia_20_llamadas_mediana_y_maximo(monkeypatch, capsys):
     """Mide 20 llamadas (1 llamada inicial + 19 simuladas) y reporta mediana y máximo."""
     tiempos_s: list[float] = []
+    entrada_prueba = EntradaIA(
+        edad_anios=30,
+        sexo_biologico="femenino",
+        signos_vitales=SignosVitalesInput(**signos_vitales_por_esi(3)),
+        sintomas=[],
+        motivo_consulta="Medición de latencia US-01",
+    )
 
     def _falsa_clasificacion(_entrada):
         return ClasificacionIA(
@@ -207,7 +221,7 @@ def test_latencia_20_llamadas_mediana_y_maximo(monkeypatch, capsys):
         if indice == 1:
             monkeypatch.setattr(engine, "clasificar", _falsa_clasificacion)
         inicio = time.perf_counter()
-        res = engine.clasificar(object())
+        res = engine.clasificar(entrada_prueba)
         tiempos_s.append(time.perf_counter() - inicio)
         assert 1 <= res.nivel_esi_sugerido <= 5
 
