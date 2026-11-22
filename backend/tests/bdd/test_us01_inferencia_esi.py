@@ -1,14 +1,14 @@
-"""Pruebas BDD para US-01 (S09-11): inferencia ESI asistida por IA y latencia."""[cite: 14, 15]
+"""Pruebas BDD para US-01 (S09-11): inferencia ESI asistida por IA y latencia."""
 
-from pathlib import Path
-from statistics import median
 import logging
 import time
 import uuid
+from pathlib import Path
+from statistics import median
 
 from pydantic import ValidationError
-import pytest
 from pytest_bdd import given, scenario, then, when
+import pytest
 
 from app.ai import engine
 from app.ai.contrato import ClasificacionIA, EntradaIA
@@ -16,7 +16,10 @@ from app.schemas.triage import SignosVitalesInput
 from tests.factories import signos_vitales_por_esi
 
 FEATURE_PATH = (
-    Path(__file__).resolve().parents[3] / "docs" / "scenarios" / "US01_inferencia_ESI.feature"
+    Path(__file__).resolve().parents[3]
+    / "docs"
+    / "scenarios"
+    / "US01_inferencia_ESI.feature"
 )
 
 
@@ -86,7 +89,7 @@ def cuando_presiona_calcular_esi(estado_us01, monkeypatch):
         "clasificar",
         lambda _entrada: ClasificacionIA(
             nivel_esi_sugerido=3,
-            justificacion="Signos vitales estables con síntomas leves sin signos de alarma.",
+            justificacion="Signos vitales estables con síntomas leves sin alarma.",
             modelo_usado="test-mock",
             latencia_ms=25,
             fallback_aplicado=False,
@@ -122,7 +125,9 @@ def cuando_solicita_inferencia_esi(estado_us01):
     estado_us01["inferencia_parcial"] = {
         "nivel_esi_sugerido": nivel_estimado,
         "precision": "baja",
-        "advertencia": f"Faltan datos clínicos complementarios: {', '.join(campos_faltantes)}",
+        "advertencia": (
+            f"Faltan datos clínicos complementarios: {', '.join(campos_faltantes)}"
+        ),
     }
 
 
@@ -197,8 +202,8 @@ def entonces_registra_en_log_errores(estado_us01):
     assert len(errores) >= 1
 
 
-def test_latencia_20_llamadas_mediana_y_maximo(monkeypatch, capsys):
-    """Mide 20 llamadas (1 llamada inicial + 19 simuladas) y reporta mediana y máximo."""
+def test_latencia_20_llamadas_mediana_y_maximo(monkeypatch):
+    """Mide 20 llamadas (1 inicial + 19 simuladas) y reporta mediana y máximo."""
     tiempos_s: list[float] = []
     entrada_prueba = EntradaIA(
         edad_anios=30,
