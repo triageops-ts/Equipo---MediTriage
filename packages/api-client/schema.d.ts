@@ -217,9 +217,29 @@ export interface paths {
         };
         /**
          * Historial inmutable de auditoría
-         * @description Devuelve el historial de auditoría, con filtros por episodio, usuario y discrepancia entre la IA y la decisión humana. Requiere rol de auditor.
+         * @description Devuelve el historial de auditoría, con filtros por episodio, usuario y discrepancia entre la IA y la decisión humana. Solo lectura, del más reciente al más antiguo. Requiere rol de auditor.
          */
         get: operations["listAuditLogs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/audit-logs/verificacion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Verificar la cadena de hashes de la auditoría
+         * @description Recorre la cadena de hashes de la bitácora inmutable y responde si es válida. Si no lo es, indica el primer registro alterado (el más antiguo de la cadena). Solo lectura. Requiere rol de auditor.
+         */
+        get: operations["verifyAuditChain"];
         put?: never;
         post?: never;
         delete?: never;
@@ -504,10 +524,12 @@ export interface components {
             evento_tipo: string;
             /** Format: uuid */
             usuario_id_actor?: string | null;
-            sugerencia_ia?: string | null;
+            /** @description Nivel ESI que sugirió la IA. */
+            sugerencia_ia?: number | null;
             /** @description Prompt enviado a la IA. Solo lleva el token efímero y datos clínicos anonimizados, nunca datos personales. */
             prompt_enviado?: string | null;
-            decision_final?: string | null;
+            /** @description Nivel ESI que decidió el personal. */
+            decision_final?: number | null;
             /** @description True si la decisión final difiere de la sugerencia de la IA. */
             hay_discrepancia: boolean;
             /** @description Hash del registro previo de la cadena. */
@@ -516,6 +538,19 @@ export interface components {
             hash_actual: string;
             /** Format: date-time */
             fecha_hora_evento: string;
+        };
+        /** @description Resultado de recorrer la cadena de hashes de registro_auditoria. */
+        VerificacionCadena: {
+            /** @description True si ningún registro fue alterado. */
+            valida: boolean;
+            registros_verificados: number;
+            /** @description El registro más antiguo de la cadena que no cuadra. Null si la cadena es íntegra. */
+            primer_registro_alterado?: {
+                /** Format: uuid */
+                registro_id: string;
+                /** @example hash_actual no coincide con el contenido del registro */
+                motivo: string;
+            } | null;
         };
         /** @description Detalle de un error según RFC 7807. Se devuelve con el content type `application/problem+json`. No debe incluir datos personales (PII) del paciente. */
         Problem: {
@@ -1033,6 +1068,29 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             422: components["responses"]["ValidationError"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    verifyAuditChain: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Resultado de la verificación */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VerificacionCadena"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalServerError"];
         };
     };
