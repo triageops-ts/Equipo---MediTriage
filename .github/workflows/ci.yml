@@ -233,6 +233,37 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
         
+  frontend-build-and-push:
+    name: Build and Push Frontend to GHCR
+    needs: frontend
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and Push Frontend Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          tags: ghcr.io/triageops-ts/meditriage-frontend:${{ github.sha }}
+          build-args: |
+            BACKEND_URL=http://meditriage-backend:80
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
   promote:
     name: Promote Image to GitOps Dev
     needs: build-and-push

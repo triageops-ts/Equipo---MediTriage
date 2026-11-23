@@ -4,7 +4,9 @@ namespace: triageops
 resources:
   - configmap.yaml
   - deployment.yaml
+  - frontend-deployment.yaml
   - service.yaml
+  - frontend-service.yaml
   - ingress.yaml
   - hpa.yaml
   - servicemonitor.yaml
