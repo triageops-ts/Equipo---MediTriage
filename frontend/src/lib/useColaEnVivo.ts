@@ -10,7 +10,7 @@
 //    (Redis Pub/Sub no guarda mensajes mientras no hay conexión).
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ApiError, obtenerCola, type ColaTriageItem } from "@/lib/api";
+import { ApiError, obtenerCola, obtenerResumenCola, type ColaTriageItem, type ResumenColaTriage } from "@/lib/api";
 import { esCritico, nivelVigente } from "@/lib/esi";
 
 export const LIMITE_COLA = 100; // máximo que acepta el endpoint
@@ -40,6 +40,7 @@ function urlWebSocket(): string {
  */
 export function useColaEnVivo(alNuevoCritico?: (nivel: 1 | 2) => void) {
   const [items, setItems] = useState<ColaTriageItem[] | null>(null);
+  const [resumen, setResumen] = useState<ResumenColaTriage | null>(null);
   const [nuevos, setNuevos] = useState<ReadonlySet<string>>(() => new Set());
   // Episodios críticos de la carga anterior (null = todavía no hubo carga).
   const criticosPrevios = useRef<Set<string> | null>(null);
@@ -47,6 +48,7 @@ export function useColaEnVivo(alNuevoCritico?: (nivel: 1 | 2) => void) {
   const [error, setError] = useState<string | null>(null);
   const [conexion, setConexion] = useState<EstadoConexion>("conectando");
   const [actualizado, setActualizado] = useState<Date | null>(null);
+  const [errorResumen, setErrorResumen] = useState<string | null>(null);
 
   useEffect(() => {
     avisar.current = alNuevoCritico;
@@ -77,8 +79,20 @@ export function useColaEnVivo(alNuevoCritico?: (nivel: 1 | 2) => void) {
     };
 
     try {
-      const datos = await obtenerCola({ limit: LIMITE_COLA });
+      const [resultadoCola, resultadoResumen] = await Promise.allSettled([
+        obtenerCola({ limit: LIMITE_COLA }),
+        obtenerResumenCola(),
+      ]);
+      if (resultadoCola.status === "rejected") throw resultadoCola.reason;
+      const datos = resultadoCola.value;
       setItems(datos);
+      if (resultadoResumen.status === "fulfilled") {
+        setResumen(resultadoResumen.value);
+        setErrorResumen(null);
+      } else {
+        setResumen(null);
+        setErrorResumen("No se pudo actualizar el resumen global de la cola.");
+      }
       detectarNuevosCriticos(datos);
       setError(null);
       setActualizado(new Date());
@@ -146,5 +160,5 @@ export function useColaEnVivo(alNuevoCritico?: (nivel: 1 | 2) => void) {
     };
   }, [cargar]);
 
-  return { items, nuevos, error, conexion, actualizado, recargar: cargar };
+  return { items, resumen, nuevos, error, errorResumen, conexion, actualizado, recargar: cargar };
 }

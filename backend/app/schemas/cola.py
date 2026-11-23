@@ -49,3 +49,10 @@ class ColaTriageItem(BaseModel):
     )
     fecha_hora_ingreso: datetime
     minutos_espera: int = Field(ge=0)
+
+
+class ResumenColaTriage(BaseModel):
+    """Conteos globales de episodios activos por nivel ESI vigente."""
+
+    por_nivel: dict[int, int]
+    sin_nivel: int = Field(ge=0)

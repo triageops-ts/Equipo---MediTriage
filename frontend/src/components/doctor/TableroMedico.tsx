@@ -47,7 +47,7 @@ function IconoSonido({ activo }: { activo: boolean }) {
 export function TableroMedico() {
   const router = useRouter();
   // sonarAlarma no hace nada mientras el sonido no se haya activado con un clic.
-  const { items, nuevos, error, conexion, actualizado, recargar } = useColaEnVivo(sonarAlarma);
+  const { items, resumen, nuevos, error, errorResumen, conexion, actualizado, recargar } = useColaEnVivo(sonarAlarma);
   const [seleccion, setSeleccion] = useState<string | null>(null);
   const [sonido, setSonido] = useState(false);
   const [avisoSonido, setAvisoSonido] = useState<string | null>(null);
@@ -55,13 +55,16 @@ export function TableroMedico() {
   const lista = items ?? [];
   const seleccionado = lista.find((i) => i.episodio_id === seleccion) ?? lista[0] ?? null;
   const criticos = lista.filter(esCritico);
-  const sinNivel = lista.filter((i) => nivelVigente(i) === null).length;
+  const totalCriticos = resumen
+    ? resumen.por_nivel[1] + resumen.por_nivel[2]
+    : criticos.length;
+  const sinNivel = resumen?.sin_nivel ?? lista.filter((i) => nivelVigente(i) === null).length;
 
   // El título de la pestaña también avisa, por si el médico está en otra ventana.
   useEffect(() => {
     document.title =
-      criticos.length > 0 ? `(${criticos.length}) ESI 1–2 · ${TITULO_PAGINA}` : TITULO_PAGINA;
-  }, [criticos.length]);
+      totalCriticos > 0 ? `(${totalCriticos}) ESI 1–2 · ${TITULO_PAGINA}` : TITULO_PAGINA;
+  }, [totalCriticos]);
 
   useEffect(() => {
     return () => {
@@ -151,15 +154,15 @@ export function TableroMedico() {
         <div
           role="alert"
           className={`flex items-center gap-3 rounded-xl border px-5 py-4 text-sm font-semibold ${
-            criticos.length > 0
+            totalCriticos > 0
               ? "border-red-300 bg-red-50 text-red-800"
               : "border-slate-200 bg-white text-slate-600"
           }`}
         >
-          {criticos.length > 0 ? (
+          {totalCriticos > 0 ? (
             <>
               <IconoAlerta className="h-5 w-5 shrink-0 animate-pulse text-red-600" />
-              {criticos.length} paciente(s) ESI 1–2 esperando atención
+              {totalCriticos} paciente(s) ESI 1–2 esperando atención
             </>
           ) : items ? (
             "Sin pacientes ESI 1–2 en espera."
@@ -176,7 +179,7 @@ export function TableroMedico() {
               className={`rounded-xl border-2 border-t-4 bg-white px-4 py-3 text-center ${ESI[nivel].contador}`}
             >
               <p className={`text-3xl font-bold ${ESI[nivel].texto}`}>
-                {lista.filter((i) => nivelVigente(i) === nivel).length}
+                {resumen?.por_nivel[nivel] ?? lista.filter((i) => nivelVigente(i) === nivel).length}
               </p>
               <p className="text-sm text-slate-700">
                 ESI {nivel} · {ESI[nivel].nombre}
@@ -195,6 +198,17 @@ export function TableroMedico() {
             <span>
               {items ? "No se pudo actualizar la lista; se muestran los últimos datos. " : ""}
               {error}
+            </span>
+            <button type="button" onClick={() => void recargar()} className="font-semibold underline">
+              Reintentar
+            </button>
+          </div>
+        )}
+
+        {errorResumen && (
+          <div className="flex items-center justify-between rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <span>
+              No se pudieron actualizar los contadores globales. Se muestran cifras parciales de los pacientes cargados.
             </span>
             <button type="button" onClick={() => void recargar()} className="font-semibold underline">
               Reintentar

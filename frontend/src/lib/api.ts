@@ -16,6 +16,7 @@ export const RUTAS = {
   decision: (episodioId: string) => `/api/v1/triage/${episodioId}/decision`,
   decisionFallo: (episodioId: string) => `/api/v1/triage/${episodioId}/decision/fallo`,
   cola: "/api/v1/triage/cola",
+  colaResumen: "/api/v1/triage/cola/resumen",
   salaEspera: "/api/v1/sala-espera",
   auditLogs: "/api/v1/audit-logs",
   auditLogsVerificacion: "/api/v1/audit-logs/verificacion",
@@ -124,6 +125,11 @@ export interface ResumenPaciente {
   /** Nula si el paciente no tiene fecha de nacimiento registrada. */
   age: number | null;
   biological_sex?: SexoBiologico | null;
+}
+
+export interface ResumenColaTriage {
+  por_nivel: Record<EsiLevel, number>;
+  sin_nivel: number;
 }
 
 export interface ColaTriageItem {
@@ -365,6 +371,11 @@ export function registrarFalloDecision(
 /** GET /triage/cola */
 export function obtenerCola(filtros: FiltrosCola = {}): Promise<ColaTriageItem[]> {
   return pedir(conQuery(RUTAS.cola, { ...filtros }));
+}
+
+/** GET /triage/cola/resumen */
+export function obtenerResumenCola(): Promise<ResumenColaTriage> {
+  return pedir(RUTAS.colaResumen);
 }
 
 /** GET /sala-espera (público: no envía ni necesita sesión). */

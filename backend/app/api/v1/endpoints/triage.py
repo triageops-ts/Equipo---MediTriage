@@ -27,6 +27,7 @@ from app.schemas.cola import (
     LIMIT_MAXIMO,
     LIMIT_POR_DEFECTO,
     ColaTriageItem,
+    ResumenColaTriage,
     EstadoEpisodio,
     PatientSummary,
 )
@@ -754,3 +755,54 @@ def listar_cola(
             sugerido, final, ingreso, minutos,
         ) in filas
     ]
+
+
+_RESUMEN_COLA_TRIAGE = """
+    SELECT
+        COALESCE(dc.nivel_esi_final, cia.nivel_esi_sugerido) AS nivel_esi,
+        COUNT(*)::int AS total
+    FROM episodio_triage e
+    LEFT JOIN LATERAL (
+        SELECT nivel_esi_sugerido
+        FROM clasificacion_ia
+        WHERE episodio_id = e.episodio_id
+        ORDER BY tiempo_respuesta DESC NULLS LAST
+        LIMIT 1
+    ) cia ON TRUE
+    LEFT JOIN decision_clinica dc ON dc.episodio_id = e.episodio_id
+    WHERE e.estado = ANY(%(estados)s)
+    GROUP BY COALESCE(dc.nivel_esi_final, cia.nivel_esi_sugerido)
+"""
+
+
+@router.get(
+    "/cola/resumen",
+    response_model=ResumenColaTriage,
+    tags=["Triages"],
+    summary="Resumen global de episodios activos por nivel ESI",
+)
+def resumen_cola(
+    usuario: Usuario = Depends(requiere_rol("medico", "enfermero")),
+    conn: psycopg.Connection = Depends(get_conn),
+):
+    with conn.cursor() as cur:
+        _verificar_usuario(cur, usuario)
+        cur.execute(
+            _RESUMEN_COLA_TRIAGE,
+            {"estados": list(ESTADOS_ACTIVOS)},
+        )
+        filas = cur.fetchall()
+
+    por_nivel = {nivel: 0 for nivel in range(1, 6)}
+    sin_nivel = 0
+
+    for nivel, total in filas:
+        if nivel is None:
+            sin_nivel = total
+        elif nivel in por_nivel:
+            por_nivel[nivel] = total
+
+    return ResumenColaTriage(
+        por_nivel=por_nivel,
+        sin_nivel=sin_nivel,
+    )

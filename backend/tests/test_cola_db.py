@@ -206,3 +206,26 @@ def test_enfermero_tambien_puede_ver_la_cola(cola_de_prueba):
 def test_parametros_invalidos_422(params):
     r = client.get(URL, headers=_cabecera_medico(), params=params)
     assert r.status_code == 422
+
+
+URL_RESUMEN = "/api/v1/triage/cola/resumen"
+
+
+def test_resumen_coincide_con_toda_la_cola(cola_de_prueba):
+    cab = _cabecera_medico()
+
+    # Obtiene todos los episodios activos, no solo los primeros 100.
+    cola = _cola_completa(cab)
+
+    r = client.get(URL_RESUMEN, headers=cab)
+    assert r.status_code == 200, r.text
+
+    resumen = r.json()
+    esperados = {
+        str(nivel): sum(_vigente(item) == nivel for item in cola)
+        for nivel in range(1, 6)
+    }
+    sin_nivel = sum(_vigente(item) is None for item in cola)
+
+    assert resumen["por_nivel"] == esperados
+    assert resumen["sin_nivel"] == sin_nivel
