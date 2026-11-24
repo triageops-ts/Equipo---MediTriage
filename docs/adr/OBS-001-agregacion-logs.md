@@ -42,7 +42,14 @@ y **Grafana** para buscarlos.
 
 Se usa Alloy y no Promtail porque Grafana declaró Promtail obsoleto y ya no recibe soporte.
 
-## 4. Consecuencias
+## 4. Alternativas descartadas
+
+- **`kubectl logs` / `docker logs` (Opción A):** descartada porque obliga a revisar réplica por réplica, se pierden los logs al reiniciarse un contenedor y no permite buscar por `request_id`.
+- **Servicio gestionado en la nube, como CloudWatch Logs (Opción B):** descartado porque amarra el proyecto a un proveedor, tiene costo y no se puede demostrar en local.
+- **Promtail como recolector:** descartado porque Grafana lo declaró obsoleto y ya no recibe soporte. Se usa Alloy.
+- **Stack ELK (Elasticsearch, Logstash y Kibana):** descartado porque consume bastante más memoria y es más complejo de operar que Loki, y el proyecto ya usa Grafana para sus métricas.
+
+## 5. Consecuencias
 
 - **Positivas:** una sola vista para los logs de todas las réplicas; búsqueda por `request_id`
   para seguir una petición de punta a punta; los logs sobreviven a reinicios de contenedores.
