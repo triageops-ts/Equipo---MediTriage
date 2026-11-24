@@ -24,6 +24,7 @@ El sistema MediTriage necesita un motor de inteligencia artificial que analice s
 
 - OpenAI (ChatGPT): alta precisión y comunidad amplia, pero con costos mayores y latencia superior en GPT‑4.
 - Google Gemini 1.5 Pro: buena integración con Google Cloud, pero configuración más compleja y menor soporte para salidas JSON.
+- Claude 3 Haiku (Anthropic): rápido, de menor costo y con SDK oficial en Python y compatibilidad con LangChain (opción elegida).
 
 ## Decisión y razones
 
@@ -34,6 +35,17 @@ Claude 3 Haiku responde en ≈ 1–2 segundos, lo que cumple el requisito 
 En términos de explicabilidad clínica, Claude produce respuestas claras y comprensibles, adecuadas para justificar la clasificación ESI ante médicos y enfermeras.
 
 En resumen, Claude 3 Haiku es rápido, económico, fácil de integrar y genera explicaciones confiables, lo que lo convierte en la mejor opción para MediTriage.
+
+## Alternativas descartadas
+
+- **OpenAI (GPT-4):** descartado por mayor costo y mayor latencia, que ponen en riesgo el límite de respuesta de urgencias.
+- **Google Gemini 1.5 Pro:** descartado por configuración más compleja y menor soporte para salidas JSON estructuradas, que el contrato de datos exige.
+- **Modelo abierto propio (por ejemplo LLaMA o Mistral alojado por el equipo):** descartado porque obliga a operar y dimensionar infraestructura de inferencia que el equipo no tiene, y sin ajuste clínico no hay garantía de que explique mejor la clasificación. Queda como opción futura si se quiere que los datos no salgan a un proveedor externo (ver `docs/data/bounded_contexts.md`).
+- **Solo reglas (árbol de decisión determinista, sin modelo de lenguaje):** descartado como motor principal porque no interpreta el texto libre de los síntomas ni redacta una justificación clara para el personal clínico. Sí se usa como respaldo: si la IA falla o tarda demasiado, el árbol de reglas entrega igual una sugerencia.
+
+## Razón de la elección frente a las alternativas
+
+Claude Haiku es el único que cumple a la vez los cinco criterios: latencia baja, salida JSON, integración simple con Python y LangChain, costo razonable y datos anonimizados. Combinado con el árbol de reglas como respaldo, cubre tanto la calidad de la explicación como la disponibilidad cuando el proveedor falla.
 
 ## Actualización (22/11/2026, tarjeta S11-5)
 
