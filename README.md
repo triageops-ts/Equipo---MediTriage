@@ -1,5 +1,106 @@
 # Equipo---MediTriage
 
+## 🐳 Inicio rápido con Docker Compose
+
+Levanta MediTriage completo (base de datos, Redis, backend y frontend) en tu computador. Estos pasos fueron probados en Windows.
+
+### 0. Requisito
+
+Docker Desktop abierto, con el motor en estado "Engine running".
+
+### 1. Crear el archivo `.env`
+
+Copia `.env.example` a `.env` y completa estos valores. **No uses las URLs de Neon:** si están en el archivo, coméntalas con `#`.
+
+```env
+DATABASE_URL=postgresql://meditriage_app:meditriage_app_dev@db:5432/meditriage_db?sslmode=disable
+MIGRATION_DATABASE_URL=postgresql://meditriage_user:meditriage_pass@db:5432/meditriage_db?sslmode=disable
+APP_ENCRYPTION_KEY=...
+APP_RUT_HASH_KEY=...
+JWT_SECRET=...
+```
+
+⚠️ `JWT_SECRET` no viene en `.env.example`: agrégala a mano. Para generar una clave:
+
+```bash
+python -c "import secrets; print(secrets.token_hex(32))"
+```
+
+### 2. (Opcional) Partir con la base de datos limpia
+
+Si ya habías levantado el proyecto antes:
+
+```bash
+docker compose down -v
+```
+
+### 3. Levantar los servicios
+
+La primera vez tarda unos 15 minutos.
+
+```bash
+docker compose up -d --build
+```
+
+Es normal que el backend se caiga con el error `Falta la tabla clave_canario`: se arregla en el paso 4.
+
+### 4. Aplicar las migraciones
+
+Deben aparecer de la 0001 a la 0013.
+
+```bash
+docker compose run --rm backend python -m alembic upgrade head
+```
+
+### 5. Levantar el backend de nuevo
+
+```bash
+docker compose up -d
+docker compose logs backend --tail 5
+```
+
+El log debe decir `Application startup complete`.
+
+### 6. Cargar los datos de demostración
+
+```bash
+docker compose run --rm -e SEED_DATABASE_URL="postgresql://meditriage_user:meditriage_pass@db:5432/meditriage_db?sslmode=disable" -e DEMO_PASSWORD="Demo-2026!" backend python -m app.cli seed-roles
+```
+
+```bash
+docker compose run --rm -e SEED_DATABASE_URL="postgresql://meditriage_user:meditriage_pass@db:5432/meditriage_db?sslmode=disable" backend python -m app.cli seed-demo
+```
+
+### 7. Probar el sistema
+
+| Qué | URL |
+|---|---|
+| Frontend (login) | http://localhost:3000/login |
+| Documentación de la API (Swagger) | http://localhost:8000/docs |
+
+**Usuarios demo** (clave: `Demo-2026!`):
+
+| Usuario | Rol | Pantalla |
+|---|---|---|
+| `enfermero@meditriage.test` | Enfermería | `/nurse` |
+| `medico@meditriage.test` | Médico | `/doctor` |
+| `auditor@meditriage.test` | Auditor | `/auditor` |
+
+Si entras con un rol y abres la vista de otro, el sistema te devuelve a la tuya (es a propósito). Para cambiar de rol, usa **Cerrar sesión**.
+
+**Cambiar la clave demo:** se define con la variable `DEMO_PASSWORD` en el comando de `seed-roles` (paso 6). Cambia `Demo-2026!` por la clave que quieras y vuelve a correr ese comando. Son usuarios de demostración: no usarlos en producción.
+
+### 🔧 Problemas típicos
+
+| Síntoma | Solución |
+|---|---|
+| Las migraciones no muestran `Running upgrade` | El `.env` apunta a Neon. Cámbialo a `@db` |
+| `service backend is not running` | Haz los pasos 4 y 5 |
+| Cambié el `.env` y no se aplica | Ejecuta `docker compose up -d` |
+| Warning `version is obsolete` | Ignorar |
+
+---
+
 ## 🛠️ Configuración del Entorno de Desarrollo Local
 
 Sigue estos pasos para clonar el repositorio, configurar el entorno virtual de Python e instalar las dependencias necesarias para trabajar en el backend.
@@ -211,7 +312,7 @@ Antes de comenzar el desarrollo o las pruebas de integración, se debe comprobar
 Para verificar PostgreSQL:
 
 ```bash
-docker compose exec postgres pg_isready
+docker compose exec db pg_isready
 ```
 
 Para verificar Redis:
@@ -220,7 +321,7 @@ Para verificar Redis:
 docker compose exec redis redis-cli ping
 ```
 
-✅ **Verificación:** Redis debe responder `PONG` y PostgreSQL debe indicar que acepta conexiones. Los nombres `postgres` y `redis` deben coincidir con los servicios definidos en `docker-compose.yml`.
+✅ **Verificación:** Redis debe responder `PONG` y PostgreSQL debe indicar que acepta conexiones. Los nombres `db` y `redis` deben coincidir con los servicios definidos en `docker-compose.yml`.
 
 ### 4. Manejo de errores de conexión
 
