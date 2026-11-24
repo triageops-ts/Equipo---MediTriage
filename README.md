@@ -302,6 +302,24 @@ Si la verificación de producción falla, abrir un PR de reversión que restaure
 
   ---
 
+## 🏗️ Arquitectura (modelo C4)
+
+| Nivel | Diagrama | Fuente |
+|---|---|---|
+| 1 · Contexto | [`docs/c4/l1-context.png`](docs/c4/l1-context.png) | [`l1-context.drawio`](docs/c4/l1-context.drawio) |
+| 2 · Contenedores | [`docs/c4/C4L2-Actualizado.png`](docs/c4/C4L2-Actualizado.png) | — |
+| 3 · Componentes del Backend | [`docs/c4/l3-componentes.png`](docs/c4/l3-componentes.png) | [`l3-componentes.drawio`](docs/c4/l3-componentes.drawio) |
+
+### Nivel 3: componentes del Backend
+
+Detalle del contenedor **Backend** del C4 L2 tomando `backend/app/` como guía: middleware HTTP y seguridad, endpoints (`api/v1/endpoints/`), autenticación y roles (JWT + `requiere_rol`), motor de IA con sanitizador PII, filtro anti prompt-injection, guardrails G1–G5 y respaldo por reglas (`ai/`), cola priorizada, auditoría inmutable (`audit.py`), tiempo real con Redis Pub/Sub (`core/realtime.py`, `/ws/tablero`) y acceso a datos con RLS (`db.py`). Los contenedores y sistemas externos usan los mismos nombres que el C4 L2.
+
+![C4 Nivel 3 - Componentes del Backend](docs/c4/l3-componentes.png)
+
+Para editarlo: abrir `docs/c4/l3-componentes.drawio` en [diagrams.net](https://app.diagrams.net) y volver a exportar `docs/c4/l3-componentes.png` (Archivo → Exportar como → PNG).
+
+---
+
 ## 📸 Evidencia de Integración Continua y GitOps 
 
 A continuación se presenta la evidencia del cumplimiento de los requisitos de GitOps, CI/CD y despliegue automatizado con Argo CD:
