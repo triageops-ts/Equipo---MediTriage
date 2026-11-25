@@ -4,6 +4,7 @@
 **Decisión original:** `docs/adr/IA-001` · **Contrato de datos:** `docs/data/contrato-ia.md`
 **Guardrails:** `docs/data/guardrails-ia.md` · **Prompt injection:** `docs/security/prompt-injection.md`
 **Auditoría:** `docs/data/auditoria-inmutable.md`
+**Model card:** `docs/ia/model-card.md` · **Evaluación:** `docs/ia/evaluacion.md` · **Golden set:** `docs/ia/golden-set.json`
 
 Este documento dice qué modelo se usa, cómo quedó el prompt, qué datos entran y salen, qué pasa
 cuando la IA falla y qué límites se conocen. Debe coincidir con lo que está construido: si el código
@@ -223,6 +224,17 @@ mayúsculas y tildes, y tokens de formato `[INST]`.
 
 **Con Claude real:** _pendiente_. Los 10 ataques no se han corrido contra el modelo real. Está propuesto
 extender `scripts/verificar_casos_limite.py` para medir cuántas veces cambia el ESI con y sin el texto de ataque.
+
+### 8.3 Golden set y evaluación con métrica (S12-15)
+
+15 casos sintéticos (`docs/ia/golden-set.json`): los 10 de 8.1 y los 5 pacientes de demo (uno por nivel ESI), cada uno con su
+ESI esperado y su criterio. `python scripts/evaluar_golden_set.py` los corre por el motor y calcula el acierto exacto, el acierto
+a ±1 nivel por ESI, la subclasificación y la sobreclasificación, marcando cuándo respondió el respaldo.
+
+**Resultado con el respaldo de reglas (el motor de la demo final):** acierto exacto 12/15 (80 %), a ±1 nivel 15/15 (100 %),
+0 subclasificados y 3 sobreclasificados. Las 15 respuestas vinieron del respaldo, así que **no mide a Claude**. Los niveles
+esperados no los ha validado personal clínico. Detalle y límites en `docs/ia/evaluacion.md`; ficha del modelo en
+`docs/ia/model-card.md`.
 
 ## 9. Límites conocidos
 
