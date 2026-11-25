@@ -3,7 +3,7 @@ from datetime import date, timedelta
 import pytest
 from pydantic import ValidationError
 
-from app.schemas.patient import PatientInput
+from app.schemas.patient import PatientInput, PatientUpdate
 
 BASE = {"rut": "11.111.111-1", "name": "Juan Perez", "has_consent": True}
 
@@ -48,3 +48,44 @@ def test_email_invalido():
 
 def test_sexo_invalido():
     assert "biological_sex" in _errores(biological_sex="otro")
+
+
+# --- PATCH /patients/{patient_id} (PatientUpdate) ---
+
+
+def test_update_solo_marca_los_campos_enviados():
+    p = PatientUpdate(name="  Ana   María  Soto ")
+    assert p.name == "Ana María Soto"
+    assert p.model_fields_set == {"name"}
+
+
+def test_update_permite_vaciar_fecha_y_sexo():
+    p = PatientUpdate(birth_date=None, biological_sex=None)
+    assert p.model_fields_set == {"birth_date", "biological_sex"}
+
+
+def test_update_vacio_es_invalido():
+    with pytest.raises(ValidationError, match="al menos un dato"):
+        PatientUpdate()
+
+
+def test_update_nombre_null_es_invalido():
+    with pytest.raises(ValidationError, match="no puede quedar vacío"):
+        PatientUpdate(name=None)
+
+
+def test_update_nombre_muy_corto_es_invalido():
+    with pytest.raises(ValidationError):
+        PatientUpdate(name=" a ")
+
+
+def test_update_fecha_futura_es_invalida():
+    with pytest.raises(ValidationError, match="futura"):
+        PatientUpdate(birth_date=date.today() + timedelta(days=1))
+
+
+def test_update_no_permite_cambiar_el_rut_ni_otros_campos():
+    with pytest.raises(ValidationError):
+        PatientUpdate(rut="11.111.111-1")
+    with pytest.raises(ValidationError):
+        PatientUpdate(name="Ana Soto", has_consent=False)

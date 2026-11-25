@@ -14,6 +14,12 @@ Frente a esta problemática, el equipo decidió desarrollar MediTriage, una plat
 
 MediTriage examina en tiempo real los síntomas, la historia clínica y los signos vitales del paciente para generar, en menos de 3 segundos, una recomendación de priorización fundamentada en el índice ESI (1–5). De este modo, asiste al personal sanitario en la detección temprana de casos críticos. Asimismo, la plataforma incorpora estrictas medidas de seguridad como la anonimización de datos personales (PII), auditorías inmutables y control de acceso basado en roles, garantizando el pleno cumplimiento de la legislación chilena sobre protección de datos sensibles (Ley 19.628 y Ley 21.719).
 
+## Alternativas descartadas
+
+* **Mantener el triage manual, sin plataforma:** se descartó porque no resuelve el problema de fondo. La categorización seguiría dependiendo de la carga del personal en cada turno, sin una recomendación en menos de 3 s, sin trazabilidad de la decisión y sin auditoría inmutable de 5 años.
+* **Sistema solo de reglas fijas (planilla o árbol de decisión sin IA):** se descartó como solución principal porque no interpreta el texto libre de los síntomas ni genera una justificación clínica en lenguaje natural. Sí se conserva como respaldo cuando la IA falla (ver IA-001).
+* **Backend con un microservicio de inferencia separado (por ejemplo, un servicio de IA aparte del backend principal):** se descartó porque agrega saltos de red que ponen en riesgo la latencia menor a 3 s y más piezas que operar para un equipo pequeño. Con FastAPI en Python, la IA corre en el mismo proceso (ver también ADR 0002).
+
 ## Consecuencias positivas
 * Cumplimiento Nativo de Baja Latencia (< 3 s): El uso de FastAPI junto con el motor asíncrono uvicorn/asyncio permite procesar la validación clínica, el desacople de PII y la llamada al modelo de lenguaje en paralelo, reduciendo los tiempos de respuesta del endpoint a milisegundos y cumpliendo con holgura el SLA de triage.
 

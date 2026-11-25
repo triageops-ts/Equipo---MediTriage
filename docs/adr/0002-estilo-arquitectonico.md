@@ -40,7 +40,13 @@ Si bien la arquitectura de microservicios tenia puntos muy buenos, la carga oper
 Para el alcance de un producto mínimo viable (MVP) con un equipo reducido y tiempos acotados, la arquitectura en capas ofrece el equilibrio óptimo entre bajo costo de mantenimiento inicial y agilidad de entrega.
 
 ---
-## 5. Consecuencias
+## 5. Alternativas descartadas
+
+- **Microservicios (Opción A):** descartada porque su carga operativa (orquestar servicios, configurar redes y aplicar seguridad granular) consumiría el tiempo que el equipo necesita para las funcionalidades del MVP, y los saltos de red entre servicios ponen en riesgo la latencia menor a 3 s. Se mantiene como camino futuro: la modularidad interna permite extraer el motor de IA si hace falta.
+- **Monolito sin separación de capas:** descartado porque es igual de simple de desplegar, pero mezcla la lógica de negocio, el motor de IA y el acceso a datos. Eso aumenta el acoplamiento y haría muy costoso extraer un módulo más adelante, algo que la mitigación de este ADR necesita.
+
+---
+## 6. Consecuencias
 
 **Positivas:**
 

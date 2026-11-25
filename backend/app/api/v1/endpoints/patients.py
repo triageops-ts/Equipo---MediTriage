@@ -2,6 +2,7 @@ import logging
 import uuid
 
 import psycopg
+from psycopg import sql
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.core.auth import requiere_rol
@@ -9,7 +10,7 @@ from app.core.consent import CONSENT_TIPO
 from app.core.rut import RutInvalido, formatear_rut, normalizar_rut
 from app.core.rut_hash import calcular_rut_hash
 from app.db import encryption_key, get_conn
-from app.schemas.patient import Patient, PatientFound, PatientInput
+from app.schemas.patient import Patient, PatientFound, PatientInput, PatientUpdate
 
 router = APIRouter()
 logger = logging.getLogger("meditriage.patients")
@@ -183,3 +184,76 @@ def list_patients(
         )
         for paciente_id, nombre, fecha_nacimiento, sexo in filas
     ]
+
+
+# Campo de la API -> columna de paciente. Solo estos se pueden editar (el RUT no).
+_COLUMNA_EDITABLE = {
+    "name": "nombre_completo",
+    "birth_date": "fecha_nacimiento",
+    "biological_sex": "sexo_biologico",
+}
+
+
+@router.patch(
+    "/patients/{patient_id}",
+    response_model=PatientFound,
+    tags=["Pacientes"],
+    summary="Corrige los datos de un paciente",
+)
+def update_patient(
+    patient_id: uuid.UUID,
+    data: PatientUpdate,
+    usuario=Depends(requiere_rol("enfermero")),
+    conn: psycopg.Connection = Depends(get_conn),
+):
+    campos = sorted(data.model_fields_set)
+    valores = {
+        "name": data.name,
+        "birth_date": data.birth_date,
+        "biological_sex": _SEXO_A_DB.get(data.biological_sex) if data.biological_sex else None,
+    }
+    parametros = {_COLUMNA_EDITABLE[c]: valores[c] for c in campos}
+    parametros.update({"paciente_id": patient_id, "key": encryption_key()})
+
+    # Los nombres de columna salen de _COLUMNA_EDITABLE (fijos), nunca del cliente.
+    consulta = sql.SQL(
+        "UPDATE paciente SET {cambios} WHERE paciente_id = %(paciente_id)s "
+        "RETURNING paciente_id, pgp_sym_decrypt(rut, %(key)s::text), nombre_completo, "
+        "fecha_nacimiento, sexo_biologico"
+    ).format(
+        cambios=sql.SQL(", ").join(
+            sql.SQL("{} = {}").format(
+                sql.Identifier(_COLUMNA_EDITABLE[c]), sql.Placeholder(_COLUMNA_EDITABLE[c])
+            )
+            for c in campos
+        )
+    )
+
+    with conn.transaction():
+        with conn.cursor() as cur:
+            cur.execute(consulta, parametros)
+            fila = cur.fetchone()
+
+    if fila is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No existe un paciente con ese identificador.",
+        )
+
+    # Quién cambió qué campos, sin los valores (nada de nombre ni fecha en el log).
+    logger.info(
+        "patient_updated",
+        extra={
+            "patient_id": str(patient_id),
+            "actor_id": str(usuario.usuario_id),
+            "fields": campos,
+        },
+    )
+    paciente_id, rut, nombre, fecha_nacimiento, sexo = fila
+    return PatientFound(
+        patient_id=paciente_id,
+        rut=rut,
+        name=nombre,
+        birth_date=fecha_nacimiento,
+        biological_sex=_SEXO_A_API.get(sexo),
+    )

@@ -191,6 +191,48 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
+  /patients/{patient_id}:
+    patch:
+      tags:
+        - Pacientes
+      summary: Corrige los datos de un paciente
+      description: >
+        Actualiza el nombre, la fecha de nacimiento o el sexo biológico de un paciente ya registrado
+        (por ejemplo, para corregir un error de digitación en admisión). Solo cambia los campos enviados;
+        `birth_date` y `biological_sex` aceptan null para dejar el dato vacío. El RUT no se puede cambiar
+        y cualquier otro campo se rechaza con 422. Requiere rol de enfermería. El cambio queda en el log
+        de la API (quién y qué campos, sin los valores).
+      operationId: updatePatient
+      x-estado: implementado
+      parameters:
+        - $ref: '#/components/parameters/PatientIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatientUpdate'
+            examples:
+              PatientUpdate:
+                $ref: '#/components/examples/PatientUpdate'
+      responses:
+        '200':
+          description: Paciente actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PatientFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
   /triage/formulario:
     post:
       tags:
@@ -665,6 +707,30 @@ components:
           type: string
           enum: [male, female]
           nullable: true
+
+    PatientUpdate:
+      type: object
+      description: Body de PATCH /patients/{patient_id}. Al menos un campo. El RUT no se puede cambiar.
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 150
+          example: "Juan Pérez Soto"
+          x-pii: true
+        birth_date:
+          type: string
+          format: date
+          nullable: true
+          description: No puede ser futura. null deja el dato vacío.
+          x-sensitivity: quasi-identifier
+        biological_sex:
+          type: string
+          enum: [male, female]
+          nullable: true
+          description: null deja el dato vacío.
 
     # Vista de paciente SIN datos personales, para colas y para el motor de IA
     PatientSummary:
@@ -1186,6 +1252,14 @@ components:
       schema:
         type: string
         format: uuid
+    PatientIdParam:
+      name: patient_id
+      in: path
+      required: true
+      description: Identificador (UUID) del paciente.
+      schema:
+        type: string
+        format: uuid
     SkipParam:
       name: skip
       in: query
@@ -1224,6 +1298,10 @@ components:
     PatientCreate:
       summary: Ejemplo de registro de paciente
       externalValue: './examples/patient-create.json'
+
+    PatientUpdate:
+      summary: Ejemplo de corrección de datos de un paciente
+      externalValue: './examples/patient-update.json'
 
     FormularioClinicoCreate:
       summary: Ejemplo de formulario clínico
