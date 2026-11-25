@@ -26,6 +26,7 @@ Este documento define los endpoints principales RESTful, filtros, paginación y 
 | :--- | :--- | :--- | :--- | :--- |
 | **POST** | `/patients` | Registra un nuevo paciente (RUT, nombre, consentimiento). | `201`, `400`, `409` | N/A |
 | **GET** | `/patients` | Obtiene la lista de pacientes registrados. | `200` | **Pag:** Sí (`skip`, `limit`) <br> **Filtros:** `?rut={rut}`, `?name={nombre}` |
+| **PATCH** | `/patients/{patient_id}` | Corrige nombre, fecha de nacimiento o sexo de un paciente (rol enfermería; el RUT no se edita). | `200`, `401`, `403`, `404`, `422` | N/A |
 
 ---
 

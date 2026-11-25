@@ -2,7 +2,7 @@ from datetime import date, datetime
 from typing import Literal, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.core.consent import CONSENT_VERSION_ACTUAL, CONSENT_VERSIONES_VALIDAS
 from app.core.rut import RutInvalido, normalizar_rut
@@ -83,3 +83,43 @@ class PatientFound(BaseModel):
     name: str
     birth_date: Optional[date] = None
     biological_sex: Optional[Literal["male", "female"]] = None
+
+
+class PatientUpdate(BaseModel):
+    """Body de PATCH /patients/{patient_id}: corrige datos de un paciente ya registrado.
+
+    Solo cambia los campos que vienen en el body. El RUT no se puede cambiar (identifica al
+    paciente) y los campos desconocidos se rechazan con 422. birth_date y biological_sex
+    aceptan null para dejar el dato vacío; name no.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: Optional[str] = Field(default=None, min_length=2, max_length=150)
+    birth_date: Optional[date] = None
+    biological_sex: Optional[Literal["male", "female"]] = None
+
+    @field_validator("name")
+    @classmethod
+    def _nombre_sin_espacios_extra(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        v = " ".join(v.split())
+        if len(v) < 2:
+            raise ValueError("El nombre es obligatorio.")
+        return v
+
+    @field_validator("birth_date")
+    @classmethod
+    def _no_futura(cls, v: Optional[date]) -> Optional[date]:
+        if v is not None and v > date.today():
+            raise ValueError("La fecha de nacimiento no puede ser futura.")
+        return v
+
+    @model_validator(mode="after")
+    def _algo_que_cambiar(self) -> "PatientUpdate":
+        if not self.model_fields_set:
+            raise ValueError("Indique al menos un dato para actualizar.")
+        if "name" in self.model_fields_set and self.name is None:
+            raise ValueError("El nombre no puede quedar vacío.")
+        return self
