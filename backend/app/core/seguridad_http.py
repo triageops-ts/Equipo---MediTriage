@@ -93,7 +93,7 @@ def configurar_seguridad_http(app: FastAPI) -> None:
         CORSMiddleware,
         allow_origins=origenes_cors(),
         allow_credentials=True,
-        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type", "Idempotency-Key"],
         expose_headers=["Retry-After"],
         max_age=600,

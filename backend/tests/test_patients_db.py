@@ -75,3 +75,88 @@ def test_buscar_rut_inexistente_devuelve_lista_vacia():
 def test_buscar_rut_invalido_422():
     r = client.get("/api/v1/patients", params={"rut": "11.111.111-2"})
     assert r.status_code == 422
+
+
+# --- PATCH /patients/{patient_id} ---
+
+
+def _crear(nombre: str = "Ana Soto", **extra) -> tuple[str, str]:
+    rut = _rut_unico()
+    r = client.post(
+        "/api/v1/patients", json={"rut": rut, "name": nombre, "has_consent": True, **extra}
+    )
+    assert r.status_code == 201, r.text
+    return r.json()["patient_id"], rut
+
+
+def test_editar_nombre_fecha_y_sexo():
+    patient_id, rut = _crear()
+    r = client.patch(
+        f"/api/v1/patients/{patient_id}",
+        json={"name": "Ana María Soto", "birth_date": "1985-04-12", "biological_sex": "female"},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body == {
+        "patient_id": patient_id,
+        "rut": rut,
+        "name": "Ana María Soto",
+        "birth_date": "1985-04-12",
+        "biological_sex": "female",
+    }
+    # La búsqueda por RUT ya devuelve los datos nuevos.
+    encontrado = client.get("/api/v1/patients", params={"rut": rut}).json()[0]
+    assert encontrado["name"] == "Ana María Soto"
+    assert encontrado["birth_date"] == "1985-04-12"
+
+
+def test_editar_solo_un_campo_no_toca_los_demas():
+    patient_id, _ = _crear(birth_date="1990-01-01", biological_sex="male")
+    r = client.patch(f"/api/v1/patients/{patient_id}", json={"name": "Ana Soto Rojas"})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["name"] == "Ana Soto Rojas"
+    assert body["birth_date"] == "1990-01-01"
+    assert body["biological_sex"] == "male"
+
+
+def test_editar_puede_vaciar_la_fecha():
+    patient_id, _ = _crear(birth_date="1990-01-01")
+    r = client.patch(f"/api/v1/patients/{patient_id}", json={"birth_date": None})
+    assert r.status_code == 200, r.text
+    assert r.json()["birth_date"] is None
+
+
+def test_editar_paciente_inexistente_404():
+    r = client.patch(f"/api/v1/patients/{uuid.uuid4()}", json={"name": "Ana Soto"})
+    assert r.status_code == 404
+
+
+def test_editar_sin_campos_422():
+    patient_id, _ = _crear()
+    assert client.patch(f"/api/v1/patients/{patient_id}", json={}).status_code == 422
+
+
+def test_editar_rut_no_se_permite_422():
+    patient_id, rut = _crear()
+    r = client.patch(f"/api/v1/patients/{patient_id}", json={"rut": _rut_unico()})
+    assert r.status_code == 422
+    # El RUT sigue siendo el original.
+    assert client.get("/api/v1/patients", params={"rut": rut}).json()[0]["patient_id"] == patient_id
+
+
+def test_editar_con_rol_medico_403():
+    patient_id, _ = _crear()
+    token_medico = crear_token(uuid.uuid4(), "medico")[0]
+    r = client.patch(
+        f"/api/v1/patients/{patient_id}",
+        json={"name": "Otro Nombre"},
+        headers={"Authorization": f"Bearer {token_medico}"},
+    )
+    assert r.status_code == 403
+
+
+def test_editar_sin_sesion_401():
+    anonimo = TestClient(app)
+    r = anonimo.patch(f"/api/v1/patients/{uuid.uuid4()}", json={"name": "Ana Soto"})
+    assert r.status_code == 401

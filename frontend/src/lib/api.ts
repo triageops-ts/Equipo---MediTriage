@@ -11,6 +11,7 @@ export const RUTAS = {
   sesion: "/api/v1/auth/me",
   logout: "/api/v1/auth/logout",
   pacientes: "/api/v1/patients",
+  paciente: (pacienteId: string) => `/api/v1/patients/${pacienteId}`,
   formulario: "/api/v1/triage/formulario",
   evaluar: (episodioId: string) => `/api/v1/triage/${episodioId}/evaluate`,
   decision: (episodioId: string) => `/api/v1/triage/${episodioId}/decision`,
@@ -30,7 +31,7 @@ export type EsiLevel = 1 | 2 | 3 | 4 | 5;
 export type EstadoEpisodio = "en_espera" | "en_atencion" | "cerrado";
 export type RolUsuario = "enfermero" | "medico" | "auditor" | "admin";
 
-// --- Pacientes (GET/POST /patients) ---
+// --- Pacientes (GET/POST /patients, PATCH /patients/{patient_id}) ---
 export interface PacienteEncontrado {
   patient_id: string;
   rut: string;
@@ -46,6 +47,13 @@ export interface PacienteNuevo {
   biological_sex?: SexoBiologico;
   has_consent: boolean;
   consent_version?: string;
+}
+
+/** Body de PATCH /patients/{patient_id}: solo los campos que cambian. El RUT no se edita. */
+export interface PacienteActualizacion {
+  name?: string;
+  birth_date?: string | null;
+  biological_sex?: SexoBiologico | null;
 }
 
 export interface PacienteCreado extends PacienteEncontrado {
@@ -329,6 +337,14 @@ export function buscarPaciente(rut: string): Promise<PacienteEncontrado[]> {
 /** POST /patients */
 export function crearPaciente(datos: PacienteNuevo): Promise<PacienteCreado> {
   return pedir(RUTAS.pacientes, { method: "POST", body: JSON.stringify(datos) });
+}
+
+/** PATCH /patients/{patient_id}: corrige nombre, fecha de nacimiento o sexo. */
+export function actualizarPaciente(
+  pacienteId: string,
+  datos: PacienteActualizacion,
+): Promise<PacienteEncontrado> {
+  return pedir(RUTAS.paciente(pacienteId), { method: "PATCH", body: JSON.stringify(datos) });
 }
 
 /** POST /triage/formulario */
