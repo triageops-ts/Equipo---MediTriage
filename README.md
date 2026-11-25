@@ -409,11 +409,12 @@ Si la verificación de producción falla, abrir un PR de reversión que restaure
 
 - Desplegado con Argo CD (Application `meditriage-staging`, overlay `overlays/staging` del repo `triageops-gitops`)
   con la imagen del CI `2bb5797e5d88e9bac5e06eacd3c7795acce3d077`.
+- Corre en una VM de Azure for Students (k3s + Argo CD, región North Central US): no depende del computador de nadie.
+  La VM se puede apagar para ahorrar crédito; al encenderla, la URL vuelve a responder en 3–5 min.
 - Base de datos propia: branch `staging` de Neon (base `meditriage_staging`). Secretos creados en el namespace
   `triageops-staging`, nunca en el repo.
 - Usuarios demo: mismos correos que en local; la contraseña de staging es distinta (pedirla a Isidora).
 - ngrok gratis muestra una página de aviso: hacer clic en **Visit Site**.
-- Corre en el clúster local de Isidora: responde solo cuando ese computador está encendido.
 
 ## 🏗️ Arquitectura (modelo C4)
 
