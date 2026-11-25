@@ -1,0 +1,134 @@
+<mxfile host="app.diagrams.net" agent="Claude">
+  <diagram name="C4 Nivel 2 - Contenedor - MediTriage" id="c4l2meditriagev5">
+    <mxGraphModel dx="1444" dy="807" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="900" background="light-dark(#FFFFFF,#FFFFFF)" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;fontSize=20;fontStyle=1;align=left;verticalAlign=middle;fontColor=#1A1A2E;" value="&lt;span style=&quot;background-color: light-dark(#ffffff, var(--ge-dark-color, #121212)); color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;MediTriage — Diagrama C4 Nivel 2 (Contenedor) · Monolito Modular en Capas&lt;/span&gt;" vertex="1">
+          <mxGeometry height="30" width="900" x="40" y="10" as="geometry" />
+        </mxCell>
+        <mxCell id="p_enf" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#08427B;fontColor=#ffffff;strokeColor=#052E56;arcSize=12;fontSize=12;align=center;" value="Enfermero/a de Triage&#xa;[Persona]&#xa;Ingresa signos vitales/síntomas;&#xa;confirma o modifica recomendación IA." vertex="1">
+          <mxGeometry height="100" width="220" x="40" y="90" as="geometry" />
+        </mxCell>
+        <mxCell id="p_med" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#08427B;fontColor=#ffffff;strokeColor=#052E56;arcSize=12;fontSize=12;align=center;" value="Médico de turno&#xa;[Persona]&#xa;Revisa recomendaciones; puede&#xa;sobreescribir el ESI y justificar." vertex="1">
+          <mxGeometry height="100" width="220" x="40" y="220" as="geometry" />
+        </mxCell>
+        <mxCell id="p_pac" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#08427B;fontColor=#ffffff;strokeColor=#052E56;arcSize=12;fontSize=12;align=center;" value="Paciente&#xa;[Persona]&#xa;Vista pública, solo lectura:&#xa;tiempos de espera anonimizados." vertex="1">
+          <mxGeometry height="100" width="220" x="40" y="350" as="geometry" />
+        </mxCell>
+        <mxCell id="p_aud" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#08427B;fontColor=#ffffff;strokeColor=#052E56;arcSize=12;fontSize=12;align=center;" value="Auditor Clínico&#xa;[Persona]&#xa;Dashboard de auditoría, solo lectura&#xa;de logs inmutables. No usa la IA en vivo." vertex="1">
+          <mxGeometry height="100" width="220" x="40" y="480" as="geometry" />
+        </mxCell>
+        <mxCell id="boundary" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=light-dark(#000000,#000000);dashed=1;verticalAlign=top;align=left;fontColor=#5A6B7B;fontSize=13;fontStyle=1;spacingLeft=10;spacingTop=8;strokeWidth=2;" value="&lt;span style=&quot;background-color: light-dark(#ffffff, var(--ge-dark-color, #121212)); color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;Sistema MediTriage&lt;/span&gt;" vertex="1">
+          <mxGeometry height="630" width="480" x="340" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="c_spa" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1168BD;fontColor=#ffffff;strokeColor=#0B4884;arcSize=10;fontSize=12;align=center;" value="Frontend&#xa;[Contenedor: Next.js, React/TypeScript]&#xa;Tailwind + Shadcn/UI. Un solo portal con&#xa;4 vistas según rol. WebSockets/SSE." vertex="1">
+          <mxGeometry height="110" width="380" x="380" y="120" as="geometry" />
+        </mxCell>
+        <mxCell id="c_api" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1168BD;fontColor=#ffffff;strokeColor=#0B4884;arcSize=10;fontSize=12;align=center;" value="Backend&#xa;[Contenedor: Monolito Modular — FastAPI, Python 3.11+, Uvicorn]&#xa;Único punto de integración: valida (Pydantic), anonimiza PII,&#xa;orquesta el Motor IA (LangChain) embebido, y consulta&#xa;HIS/EMR y Auth Provider. Detalle de capas en C4 Nivel 3." vertex="1">
+          <mxGeometry height="150" width="420" x="380" y="280" as="geometry" />
+        </mxCell>
+        <mxCell id="c_db" parent="1" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=18;fillColor=#1168BD;fontColor=#ffffff;strokeColor=#0B4884;fontSize=12;align=center;" value="PostgreSQL&#xa;[Contenedor: pgcrypto + Row-Level Security]&#xa;Pacientes, consentimientos, signos vitales,&#xa;triages y Audit Log inmutable (WORM, 5 años)." vertex="1">
+          <mxGeometry height="170" width="200" x="380" y="480" as="geometry" />
+        </mxCell>
+        <mxCell id="c_redis" parent="1" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=18;fillColor=#1168BD;fontColor=#ffffff;strokeColor=#0B4884;fontSize=12;align=center;" value="Redis&#xa;[Contenedor: Pub/Sub + sesiones]&#xa;Recibe eventos del backend y sesiones&#xa;activas; publica actualizaciones en vivo." vertex="1">
+          <mxGeometry height="160" width="200" x="600" y="480" as="geometry" />
+        </mxCell>
+        <mxCell id="ext_llm" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#8C9BAB;fontColor=#ffffff;strokeColor=#6B7A8C;arcSize=10;fontSize=12;align=center;" value="API Anthropic (Claude Haiku 5.5)&#xa;[Sistema externo · modelo claude-haiku-5-5]&#xa;Recibe datos clínicos sanitizados (sin PII);&#xa;devuelve nivel ESI sugerido + explicación." vertex="1">
+          <mxGeometry height="100" width="280" x="1010" y="90" as="geometry" />
+        </mxCell>
+        <mxCell id="ext_his" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#8C9BAB;fontColor=#ffffff;strokeColor=#6B7A8C;arcSize=10;fontSize=12;align=center;" value="Sistema Hospitalario (HIS/EMR)&#xa;[Sistema externo]&#xa;El backend consulta antecedentes y&#xa;derivaciones, y envía resultados de triage." vertex="1">
+          <mxGeometry height="100" width="280" x="1020" y="270" as="geometry" />
+        </mxCell>
+        <mxCell id="ext_auth" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#8C9BAB;fontColor=#ffffff;strokeColor=#6B7A8C;arcSize=10;fontSize=12;align=center;" value="Proveedor de Autenticación&#xa;[Sistema externo: SSO/Keycloak]&#xa;Valida credenciales y roles&#xa;(enfermera, médico, auditor)." vertex="1">
+          <mxGeometry height="90" width="280" x="1020" y="400" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" edge="1" parent="1" source="p_enf" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;fontColor=#404040;strokeColor=light-dark(#000000,#000000);endArrow=block;endFill=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.2;entryDx=0;entryDy=0;" target="c_spa" value="usa&amp;nbsp;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e1b" edge="1" parent="1" source="p_med" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;fontColor=#404040;strokeColor=light-dark(#000000,#000000);endArrow=block;endFill=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.4;entryDx=0;entryDy=0;" target="c_spa" value="usa">
+          <mxGeometry relative="1" x="-0.0265" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e1c" edge="1" parent="1" source="p_pac" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;fontColor=#404040;strokeColor=light-dark(#000000,#000000);endArrow=block;endFill=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.6;entryDx=0;entryDy=0;" target="c_spa" value="usa">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e1d" edge="1" parent="1" source="p_aud" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;fontColor=#404040;strokeColor=light-dark(#000000,#000000);endArrow=block;endFill=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.8;entryDx=0;entryDy=0;strokeWidth=1;" target="c_spa" value="usa">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" edge="1" parent="1" source="c_spa" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;fontColor=#404040;strokeColor=light-dark(#000000,#000000);endArrow=block;endFill=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="c_api" value="realiza llamadas [HTTPS/WSS]">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" edge="1" parent="1" source="c_api" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;fontColor=#404040;strokeColor=light-dark(#000000,#000000);endArrow=block;endFill=1;exitX=0.3;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="c_db" value="lee / escribe [SQL/TLS]">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" edge="1" parent="1" source="c_api" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;fontColor=#404040;strokeColor=light-dark(#000000,#000000);endArrow=block;endFill=1;exitX=0.7;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="c_redis" value="publica evento [TCP]">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4b" edge="1" parent="1" source="c_redis" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;fontColor=#404040;strokeColor=light-dark(#000000,#000000);endArrow=block;endFill=1;exitX=1;exitY=0.3;exitDx=0;exitDy=0;entryX=1;entryY=0.7;entryDx=0;entryDy=0;" target="c_spa" value="emite actualización&amp;nbsp;&lt;div&gt;en vivo [WSS]&lt;/div&gt;">
+          <mxGeometry relative="1" x="-0.4989" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="850" y="510" />
+              <mxPoint x="850" y="197" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e5" edge="1" parent="1" source="c_api" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;fontColor=#404040;strokeColor=light-dark(#000000,#000000);endArrow=block;endFill=1;startArrow=block;startFill=1;dashed=1;exitX=1;exitY=0.15;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="ext_llm" value="Inferencia ESI [HTTPS, JSON]">
+          <mxGeometry relative="1" x="0.302" as="geometry">
+            <mxPoint x="1" as="offset" />
+            <Array as="points">
+              <mxPoint x="830" y="302" />
+              <mxPoint x="830" y="140" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e6" edge="1" parent="1" source="c_api" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;fontColor=#404040;strokeColor=light-dark(#000000,#000000);endArrow=block;endFill=1;startArrow=block;startFill=1;dashed=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="ext_his" value="Datos clínicos / derivaciones&lt;div&gt;&amp;nbsp;[REST/HL7]&lt;/div&gt;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e7" edge="1" parent="1" source="c_api" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;fontColor=#404040;strokeColor=light-dark(#000000,#000000);endArrow=block;endFill=1;startArrow=block;startFill=1;dashed=1;exitX=1;exitY=0.85;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="ext_auth" value="Autenticación y roles&lt;div&gt;&amp;nbsp;[OIDC/SAML]&lt;/div&gt;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1000" y="407.5" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ext_logs" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#8C9BAB;fontColor=#ffffff;strokeColor=#6B7A8C;arcSize=10;fontSize=12;align=center;" value="Agregación de logs&#xa;[Sistema externo: Grafana Loki + Alloy + Grafana]&#xa;Junta los logs JSON de todas las réplicas;&#xa;búsqueda por request_id. Sin PII (ADR OBS-001)." vertex="1">
+          <mxGeometry height="110" width="280" x="1000" y="530" as="geometry" />
+        </mxCell>
+        <mxCell id="e8" edge="1" parent="1" source="c_api" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;fontColor=#404040;strokeColor=light-dark(#000000,#000000);endArrow=block;endFill=1;dashed=1;exitX=1;exitY=0.95;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="ext_logs" value="envía logs JSON (stdout)&lt;div&gt;vía Alloy [HTTP]&lt;/div&gt;">
+          <mxGeometry relative="1" x="0.451" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="800" y="440" />
+              <mxPoint x="900" y="440" />
+              <mxPoint x="900" y="585" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="leg_title" parent="1" style="text;html=1;fontSize=13;fontStyle=1;align=left;fontColor=#1A1A2E;" value="&lt;span style=&quot;color: light-dark(rgb(0, 0, 0), rgb(0, 0, 0));&quot;&gt;Leyenda&lt;/span&gt;" vertex="1">
+          <mxGeometry height="20" width="150" x="40" y="730" as="geometry" />
+        </mxCell>
+        <mxCell id="leg1" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#08427B;strokeColor=#052E56;" value="" vertex="1">
+          <mxGeometry height="20" width="20" x="40" y="755" as="geometry" />
+        </mxCell>
+        <mxCell id="leg1t" parent="1" style="text;html=1;fontSize=11;align=left;verticalAlign=middle;fontColor=#404040;" value="&lt;span style=&quot;color: light-dark(rgb(0, 0, 0), rgb(0, 0, 0));&quot;&gt;Persona (usuario)&lt;/span&gt;" vertex="1">
+          <mxGeometry height="20" width="180" x="70" y="755" as="geometry" />
+        </mxCell>
+        <mxCell id="leg2" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1168BD;strokeColor=#0B4884;" value="" vertex="1">
+          <mxGeometry height="20" width="20" x="260" y="755" as="geometry" />
+        </mxCell>
+        <mxCell id="leg2t" parent="1" style="text;html=1;fontSize=11;align=left;verticalAlign=middle;fontColor=#404040;" value="&lt;span style=&quot;color: light-dark(rgb(0, 0, 0), rgb(0, 0, 0));&quot;&gt;Contenedor (dentro de MediTriage)&lt;/span&gt;" vertex="1">
+          <mxGeometry height="20" width="260" x="290" y="755" as="geometry" />
+        </mxCell>
+        <mxCell id="leg3" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#8C9BAB;strokeColor=#6B7A8C;" value="" vertex="1">
+          <mxGeometry height="20" width="20" x="560" y="755" as="geometry" />
+        </mxCell>
+        <mxCell id="leg3t" parent="1" style="text;html=1;fontSize=11;align=left;verticalAlign=middle;fontColor=#404040;strokeColor=none;" value="&lt;span style=&quot;color: light-dark(rgb(0, 0, 0), rgb(0, 0, 0));&quot;&gt;Sistema externo&lt;/span&gt;" vertex="1">
+          <mxGeometry height="20" width="160" x="590" y="755" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

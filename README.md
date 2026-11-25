@@ -420,7 +420,7 @@ Si la verificación de producción falla, abrir un PR de reversión que restaure
 | Nivel | Diagrama | Fuente |
 |---|---|---|
 | 1 · Contexto | [`docs/c4/l1-context.png`](docs/c4/l1-context.png) | [`l1-context.drawio`](docs/c4/l1-context.drawio) |
-| 2 · Contenedores | [`docs/c4/C4L2-Actualizado.png`](docs/c4/C4L2-Actualizado.png) | — |
+| 2 · Contenedores | [`docs/c4/C4L2-Actualizado.png`](docs/c4/C4L2-Actualizado.png) | [`l2-container.drawio`](docs/c4/l2-container.drawio) |
 | 3 · Componentes del Backend | [`docs/c4/l3-componentes.png`](docs/c4/l3-componentes.png) | [`l3-componentes.drawio`](docs/c4/l3-componentes.drawio) |
 
 ### Nivel 3: componentes del Backend
