@@ -50,22 +50,14 @@ El respaldo no incluye roles globales de PostgreSQL. La primera restauración re
 
 ## 5. Game Day: recuperación de Redis
 
+### Prueba local
+
 Fecha: 25-11-2026.
 Entorno: Docker Compose local.
 Tipo de falla: detención controlada del contenedor Redis.
 
-Estado inicial:
-- Redis respondió PONG.
-- Backend respondió HTTP 200.
-- Estado del backend: healthy.
-- Inicio registrado: 16:32:48.
-
-Falla simulada:
-- Contenedor detenido mediante docker compose stop redis.
 - Inicio de medición de la falla: 16:37:10.
-
-Recuperación:
-- Comando: docker compose start redis.
+- Comando de recuperación: docker compose start redis.
 - Redis respondió PONG.
 - Backend respondió HTTP 200 y healthy.
 - Fin de recuperación: 16:39:17.
@@ -73,9 +65,30 @@ Recuperación:
 
 Resultado: recuperación local exitosa.
 
-Limitación:
-El ejercicio se realizó en Docker Compose local. No corresponde a una prueba en un entorno staging separado.
+### Prueba en staging
 
+Fecha: 25-11-2026.
+Entorno: VM staging, namespace triageops-staging.
+Tipo de falla: eliminación controlada del pod Redis.
+
+Estado inicial:
+- Deployment redis: 1/1 disponible.
+- Backend: 2/2 disponible.
+- Frontend: 2/2 disponible.
+- Inicio de la prueba: 23:44:24 UTC.
+
+Falla simulada:
+- Se eliminó el pod redis-58d9bdbf-dx2q6 mediante kubectl delete pod.
+- Kubernetes creó automáticamente el nuevo pod redis-58d9bdbf-mt9z4.
+- El nuevo pod alcanzó estado 1/1 Running.
+
+Verificación de recuperación:
+- Comprobación final de pods: 23:48:05 UTC.
+- Tiempo total desde la falla hasta la comprobación final: 3 minutos y 41 segundos.
+- Backend respondió HTTP 200 OK.
+- Estado del servicio: healthy.
+
+Resultado: recuperación exitosa en staging. Kubernetes recreó Redis y el backend continuó respondiendo correctamente.
 ## 6. Runbooks
 
 Procedimiento utilizado:
@@ -90,6 +103,4 @@ Las capturas de las pruebas se almacenan en docs/img/.
 ## 8. Pendientes
 
 - Validar los objetivos RPO y RTO con el equipo.
-- Ejecutar Game Day en un entorno staging separado cuando esté disponible.
-- Completar y revisar las evidencias del ejercicio.
-- Comunicar los resultados al responsable de la tarjeta 12.
+- Comunicar los resultados del Game Day al responsable de la tarjeta 12.
