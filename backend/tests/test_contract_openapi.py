@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 import schemathesis
 from fastapi.testclient import TestClient
+from hypothesis import HealthCheck, settings
 
 from app.core.security import crear_token, hash_password
 from app.db import get_conn, get_conn_login
@@ -76,6 +77,7 @@ schema = schemathesis.from_path(str(_encontrar_openapi()))
 
 
 @schema.parametrize()
+@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
 def test_contrato_openapi(case, contrato_cliente):
     response = case.call_and_validate(session=contrato_cliente)
     assert response is not None
