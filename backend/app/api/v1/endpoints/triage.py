@@ -651,6 +651,9 @@ def evaluar_episodio(
 # Orden: ESI ascendente (1 arriba); a igual nivel, el que lleva más tiempo esperando.
 # Los episodios aún sin nivel van al final. episodio_id desempata para que la
 # paginación sea estable entre páginas.
+# Con con_decision=true solo entran los episodios que la enfermera ya confirmó o
+# sobrescribió (tienen decision_clinica): así el tablero médico no muestra casos en
+# evaluación, ni en la carga inicial ni en la recarga periódica.
 # Del paciente solo se leen fecha de nacimiento y sexo: nunca nombre ni RUT.
 _COLA_TRIAGE = """
     SELECT
@@ -677,6 +680,7 @@ _COLA_TRIAGE = """
     ) cia ON TRUE
     LEFT JOIN decision_clinica dc ON dc.episodio_id = e.episodio_id
     WHERE e.estado = ANY(%(estados)s)
+      AND (NOT %(con_decision)s::boolean OR dc.episodio_id IS NOT NULL)
       AND (
           %(nivel_esi)s::int IS NULL
           OR COALESCE(dc.nivel_esi_final, cia.nivel_esi_sugerido) = %(nivel_esi)s::int
@@ -712,6 +716,13 @@ def listar_cola(
         le=5,
         description="Filtra por nivel ESI vigente (el final si ya hay decisión, si no el sugerido).",
     ),
+    con_decision: bool = Query(
+        default=False,
+        description=(
+            "Solo episodios con decisión clínica (ESI confirmado o sobrescrito por enfermería). "
+            "Lo usa el tablero médico."
+        ),
+    ),
     skip: int = Query(default=0, ge=0, description="Registros a saltar (paginación)."),
     limit: int = Query(
         default=LIMIT_POR_DEFECTO,
@@ -729,6 +740,7 @@ def listar_cola(
             {
                 "estados": [estado] if estado else list(ESTADOS_ACTIVOS),
                 "nivel_esi": nivel_esi,
+                "con_decision": con_decision,
                 "skip": skip,
                 "limit": limit,
             },
@@ -771,6 +783,7 @@ _RESUMEN_COLA_TRIAGE = """
     ) cia ON TRUE
     LEFT JOIN decision_clinica dc ON dc.episodio_id = e.episodio_id
     WHERE e.estado = ANY(%(estados)s)
+      AND (NOT %(con_decision)s::boolean OR dc.episodio_id IS NOT NULL)
     GROUP BY COALESCE(dc.nivel_esi_final, cia.nivel_esi_sugerido)
 """
 
@@ -782,6 +795,10 @@ _RESUMEN_COLA_TRIAGE = """
     summary="Resumen global de episodios activos por nivel ESI",
 )
 def resumen_cola(
+    con_decision: bool = Query(
+        default=False,
+        description="Cuenta solo episodios con decisión clínica, igual que la cola.",
+    ),
     usuario: Usuario = Depends(requiere_rol("medico", "enfermero")),
     conn: psycopg.Connection = Depends(get_conn),
 ):
@@ -789,7 +806,7 @@ def resumen_cola(
         _verificar_usuario(cur, usuario)
         cur.execute(
             _RESUMEN_COLA_TRIAGE,
-            {"estados": list(ESTADOS_ACTIVOS)},
+            {"estados": list(ESTADOS_ACTIVOS), "con_decision": con_decision},
         )
         filas = cur.fetchall()
 
