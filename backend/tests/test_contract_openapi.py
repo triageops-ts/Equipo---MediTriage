@@ -115,7 +115,7 @@ def test_contrato_openapi(case, contrato_cliente):
                 return
 
             if (
-                metodo == "GET"
+                metodo in ("GET", "POST")
                 and ruta.endswith("/patients")
                 and tipo == "RejectedPositiveData"
                 and response.status_code == 422
