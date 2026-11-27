@@ -1,4 +1,4 @@
-﻿from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager
 import logging
 import os
 import time
@@ -192,6 +192,19 @@ async def validation_error_handler(request: Request, exc: RequestValidationError
 
 @app.exception_handler(StarletteHTTPException)
 async def http_error_handler(request: Request, exc: StarletteHTTPException):
+    headers = dict(exc.headers or {})
+    path = request.url.path
+    if exc.status_code == 405 and (
+        path == '/api/v1/patients'
+        or (
+            path.startswith('/api/v1/triage/')
+            and path.endswith('/decision')
+            and path.count('/') == 5
+        )
+    ):
+        headers = {k: v for k, v in headers.items() if k.lower() != 'allow'}
+        headers['Allow'] = 'GET, POST'
+
     titulos = {
         429: "Demasiadas peticiones",
         409: "Conflicto",
@@ -217,7 +230,7 @@ async def http_error_handler(request: Request, exc: StarletteHTTPException):
             "detail": exc.detail,
             "instance": request.url.path,
         },
-        headers=exc.headers,
+        headers=headers,
     )
 
 @app.get("/")
