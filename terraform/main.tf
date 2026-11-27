@@ -9,9 +9,7 @@ terraform {
     }
   }
 
-  # Backend remoto declarado. 
-  # Nota: Está comentado para que no te dé errores al probarlo localmente en tu PC.
-  # Si los profesores preguntan, diles que basta con descomentarlo cuando haya credenciales reales.
+  # Backend remoto declarado.
   # backend "s3" {
   #   bucket = "meditriage-terraform-state"
   #   key    = "k8s/terraform.tfstate"
@@ -19,16 +17,16 @@ terraform {
   # }
 }
 
-# Declarar el provider apuntando al cluster local (Docker Desktop, Minikube, Kind)
+# Provider Kubernetes
 provider "kubernetes" {
   config_path = "~/.kube/config"
 }
 
-# Variable para el nombre del equipo (Namespace)
+# Variable para el nombre del equipo
 variable "equipo_namespace" {
   type        = string
   description = "Nombre del namespace asignado al equipo"
-  default     = "triageops" 
+  default     = "triageops"
 }
 
 # Variable placeholder marcada como sensitive
@@ -39,18 +37,36 @@ variable "secret_placeholder_password" {
   default     = "super-secreto-placeholder-123"
 }
 
+# Variable para identificar el ambiente
+variable "ambiente" {
+  type        = string
+  description = "Ambiente de despliegue"
+  default     = "local"
+}
+
+# Etiquetas comunes para FinOps (S12-14)
+locals {
+  finops_tags = {
+    proyecto    = "meditriage"
+    ambiente    = var.ambiente
+    responsable = "triageops"
+  }
+}
+
 # Creación del Namespace
 resource "kubernetes_namespace" "equipo_ns" {
   metadata {
-    name = var.equipo_namespace
+    name   = var.equipo_namespace
+    labels = local.finops_tags
   }
 }
 
 # Creación del Secret Placeholder
 resource "kubernetes_secret" "placeholder_secret" {
   metadata {
-    name      = "triageops-secrets" 
+    name      = "triageops-secrets"
     namespace = kubernetes_namespace.equipo_ns.metadata[0].name
+    labels    = local.finops_tags
   }
 
   data = {
