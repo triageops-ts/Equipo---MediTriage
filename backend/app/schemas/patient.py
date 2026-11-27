@@ -37,6 +37,13 @@ class PatientInput(BaseModel):
             raise ValueError("El nombre es obligatorio.")
         return v
 
+    @field_validator("birth_date", mode="before")
+    @classmethod
+    def _fecha_tipo_valido(cls, v):
+        if v is not None and not isinstance(v, (str, date)):
+            raise ValueError("La fecha debe tener formato YYYY-MM-DD.")
+        return v
+
     @field_validator("birth_date")
     @classmethod
     def _no_futura(cls, v: Optional[date]) -> Optional[date]:
