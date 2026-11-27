@@ -106,6 +106,8 @@ paths:
             schema:
               $ref: '#/components/schemas/LoginInput'
       responses:
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '200':
           description: Sesión iniciada
           content:
@@ -141,6 +143,8 @@ paths:
               PatientCreate:
                 $ref: '#/components/examples/PatientCreate'
       responses:
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '201':
           description: Paciente creado exitosamente
           content:
@@ -216,6 +220,8 @@ paths:
               PatientUpdate:
                 $ref: '#/components/examples/PatientUpdate'
       responses:
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '200':
           description: Paciente actualizado
           content:
@@ -253,6 +259,8 @@ paths:
               FormularioClinicoCreate:
                 $ref: '#/components/examples/FormularioClinicoCreate'
       responses:
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '201':
           description: Episodio de triage creado
           content:
@@ -310,6 +318,34 @@ paths:
           $ref: '#/components/responses/InternalServerError'
 
   /triage/{episodio_id}/decision:
+    get:
+      tags:
+        - Triages
+      summary: Consulta la decision final de triage
+      description: Consulta la decision registrada. Requiere rol de enfermeria.
+      operationId: getTriageDecision
+      x-estado: implementado
+      parameters:
+        - $ref: '#/components/parameters/EpisodioIdParam'
+      responses:
+        '200':
+          description: Decision encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DecisionResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
     post:
       tags:
         - Triages
@@ -330,6 +366,8 @@ paths:
             schema:
               $ref: '#/components/schemas/DecisionInput'
       responses:
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '201':
           description: Decisión registrada
           content:
@@ -618,26 +656,33 @@ components:
           x-pii: true
         birth_date:
           type: string
+          nullable: true
           format: date
           description: No puede ser futura. Nunca se envía a la IA; solo se deriva la edad.
           x-sensitivity: quasi-identifier
         biological_sex:
-          $ref: '#/components/schemas/SexoBiologico'
+          type: string
+          nullable: true
+          enum: [male, female, null]
         address:
           type: string
+          nullable: true
           maxLength: 255
           x-pii: true
         phone:
           type: string
+          nullable: true
           maxLength: 30
           x-pii: true
         email:
           type: string
+          nullable: true
           format: email
           maxLength: 150
           x-pii: true
         has_consent:
           type: boolean
+          enum: [true]
           description: Debe ser true.
           example: true
         consent_version:
@@ -1145,6 +1190,12 @@ components:
 
   responses:
     # Respuestas de error reutilizables (formato RFC 7807)
+    BadRequest:
+      description: No se pudo interpretar el cuerpo de la solicitud.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
     NotFound:
       description: El recurso solicitado no fue encontrado.
       content:
