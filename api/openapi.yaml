@@ -408,6 +408,15 @@ paths:
           description: Filtra por nivel ESI vigente (el final si ya hay decisión, si no el sugerido).
           schema:
             $ref: '#/components/schemas/EsiLevel'
+        - name: con_decision
+          in: query
+          description: >
+            Si es true, devuelve solo los episodios con decisión clínica (ESI confirmado o
+            sobrescrito por enfermería). Lo usa el tablero médico para no mostrar casos que
+            siguen en evaluación.
+          schema:
+            type: boolean
+            default: false
         - $ref: '#/components/parameters/SkipParam'
         - $ref: '#/components/parameters/LimitParam'
       responses:

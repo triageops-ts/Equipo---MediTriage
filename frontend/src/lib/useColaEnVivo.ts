@@ -80,8 +80,10 @@ export function useColaEnVivo(alNuevoCritico?: (nivel: 1 | 2) => void) {
 
     try {
       const [resultadoCola, resultadoResumen] = await Promise.allSettled([
-        obtenerCola({ limit: LIMITE_COLA }),
-        obtenerResumenCola(),
+        // Solo casos con ESI confirmado o sobrescrito por enfermería: los que están en
+        // evaluación no deben aparecer en el tablero, ni siquiera en la recarga periódica.
+        obtenerCola({ limit: LIMITE_COLA, con_decision: true }),
+        obtenerResumenCola({ con_decision: true }),
       ]);
       if (resultadoCola.status === "rejected") throw resultadoCola.reason;
       const datos = resultadoCola.value;

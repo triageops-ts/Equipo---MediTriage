@@ -170,6 +170,8 @@ export interface SalaEsperaEntry {
 export interface FiltrosCola {
   estado?: EstadoEpisodio;
   nivel_esi?: EsiLevel;
+  /** Solo episodios con ESI confirmado o sobrescrito por enfermería (tablero médico). */
+  con_decision?: boolean;
   skip?: number;
   limit?: number;
 }
@@ -390,8 +392,10 @@ export function obtenerCola(filtros: FiltrosCola = {}): Promise<ColaTriageItem[]
 }
 
 /** GET /triage/cola/resumen */
-export function obtenerResumenCola(): Promise<ResumenColaTriage> {
-  return pedir(RUTAS.colaResumen);
+export function obtenerResumenCola(
+  filtros: { con_decision?: boolean } = {},
+): Promise<ResumenColaTriage> {
+  return pedir(conQuery(RUTAS.colaResumen, { ...filtros }));
 }
 
 /** GET /sala-espera (público: no envía ni necesita sesión). */

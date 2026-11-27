@@ -13,7 +13,7 @@ import os
 import psycopg
 import pytest
 
-from test_decision_db import _cabecera_enfermero, _episodio, client
+from test_decision_db import _cabecera_enfermero, _decidir, _episodio, client
 
 pytestmark = pytest.mark.skipif(
     not (os.environ.get("DATABASE_URL") and os.environ.get("APP_ENCRYPTION_KEY")),
@@ -201,7 +201,11 @@ def test_enfermero_tambien_puede_ver_la_cola(cola_de_prueba):
 
 
 @pytest.mark.parametrize(
-    "params", [{"limit": 0}, {"limit": 101}, {"skip": -1}, {"nivel_esi": 6}, {"estado": "otro"}]
+    "params",
+    [
+        {"limit": 0}, {"limit": 101}, {"skip": -1}, {"nivel_esi": 6}, {"estado": "otro"},
+        {"con_decision": "talvez"},
+    ],
 )
 def test_parametros_invalidos_422(params):
     r = client.get(URL, headers=_cabecera_medico(), params=params)
@@ -229,3 +233,48 @@ def test_resumen_coincide_con_toda_la_cola(cola_de_prueba):
 
     assert resumen["por_nivel"] == esperados
     assert resumen["sin_nivel"] == sin_nivel
+
+
+# --- con_decision=true: lo que ve el tablero médico (S12-7) ---
+
+
+def test_con_decision_solo_devuelve_episodios_decididos(cola_de_prueba):
+    por_id = {v: k for k, v in cola_de_prueba.items()}
+    cola = _cola_completa(_cabecera_medico(), con_decision="true")
+    assert all(i["nivel_esi_final"] is not None for i in cola)
+    # Solo e03, e05, e09 y e14 tienen decisión; en el orden del nivel final.
+    assert [por_id[i["episodio_id"]] for i in cola if i["episodio_id"] in por_id] == [
+        "e03", "e05", "e09", "e14",
+    ]
+
+
+def test_sin_con_decision_sigue_devolviendo_todo(cola_de_prueba):
+    ids = {i["episodio_id"] for i in _cola_completa(_cabecera_medico())}
+    assert set(cola_de_prueba.values()) <= ids
+
+
+def test_resumen_con_decision_coincide_con_la_cola(cola_de_prueba):
+    cab = _cabecera_medico()
+    cola = _cola_completa(cab, con_decision="true")
+    r = client.get(URL_RESUMEN, headers=cab, params={"con_decision": "true"})
+    assert r.status_code == 200, r.text
+    resumen = r.json()
+    assert resumen["sin_nivel"] == 0
+    assert resumen["por_nivel"] == {
+        str(nivel): sum(i["nivel_esi_final"] == nivel for i in cola) for nivel in range(1, 6)
+    }
+
+
+def test_episodio_aparece_en_el_tablero_solo_despues_de_confirmar():
+    cab = _cabecera_medico()
+    ep = _episodio(sugerido=2)  # ingreso + sugerencia de la IA, sin decisión
+
+    antes = {i["episodio_id"] for i in _cola_completa(cab, con_decision="true")}
+    assert ep not in antes
+
+    r = _decidir(ep, nivel_esi_final=2)  # la enfermera confirma el ESI sugerido
+    assert r.status_code == 201, r.text
+
+    despues = {i["episodio_id"]: i for i in _cola_completa(cab, con_decision="true")}
+    assert ep in despues
+    assert despues[ep]["nivel_esi_final"] == 2
