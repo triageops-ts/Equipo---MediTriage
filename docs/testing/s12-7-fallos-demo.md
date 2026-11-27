@@ -36,5 +36,5 @@ mismo ambiente donde se hará la demo** (staging), registrando fecha, ambiente y
 
 | Recorrido | Ambiente | Fecha | Resultado |
 |---|---|---|---|
-| S12-3 · Enfermería | Local (Docker, http://127.0.0.1:3000) | 26/11/2026 | |
-| S12-4 · Médico y auditor | Local (Docker, http://127.0.0.1:3000) | 26/11/2026 | |
+| S12-3 · Enfermería | Local (Docker, http://127.0.0.1:3000) | 26/11/2026 | ✅ OK |
+| S12-4 · Médico y auditor | Local (Docker, http://127.0.0.1:3000) | 26/11/2026 | ✅ OK |
