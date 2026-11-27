@@ -687,6 +687,7 @@ components:
           example: true
         consent_version:
           type: string
+          enum: ['1.0']
           description: Versión del texto de consentimiento que el paciente aceptó. Si se omite se usa la versión vigente.
           example: "1.0"
 
