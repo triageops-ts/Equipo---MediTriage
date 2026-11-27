@@ -13,8 +13,8 @@ description = "Token de ejemplo del catálogo de eventos (docs/data/event-catalo
 regexes = ['''tok_sec_abc123''']
 
 [[allowlists]]
-description = "Valor de prueba de JWT_SECRET en backend/tests/conftest.py. Solo permite que los tests firmen tokens; no se usa en ningún ambiente real (la app lee JWT_SECRET del entorno)."
+description = "Valor de prueba de JWT_SECRET en backend/tests/conftest.py y backend/tests/test_contract_openapi.py. Solo permite que los tests firmen tokens; no se usa en ningún ambiente real (la app lee JWT_SECRET del entorno)."
 condition = "AND"
-paths = ['''backend/tests/conftest\.py''']
+paths = ['''backend/tests/(conftest|test_contract_openapi)\.py''']
 regexTarget = "line"
 regexes = ['''JWT_SECRET''']
