@@ -107,8 +107,8 @@ Sigue estos pasos para clonar el repositorio, configurar el entorno virtual de P
 
 ### Prerrequisitos
 
-* **Git** instalado en el sistema.
-* **Python 3.11+** instalado (asegúrate de marcar la casilla *"Add Python to PATH"* durante la instalación).
+- **Git** instalado en el sistema.
+- **Python 3.11+** instalado (asegúrate de marcar la casilla *"Add Python to PATH"* durante la instalación).
 
 ---
 
@@ -158,6 +158,7 @@ python3 -m venv venv
 ```powershell
 .\venv\Scripts\Activate.ps1
 ```
+
 *(Nota: Si PowerShell arroja un error de ejecución de scripts, ejecuta primero `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` y vuelve a intentar).*
 
 #### En Windows (Git Bash):
@@ -195,9 +196,9 @@ Inicia el servidor local con recarga automática:
 uvicorn app.main:app --reload --port 8000
 ```
 
-* **API Base:** `http://localhost:8000`
-* **Health Check:** `http://localhost:8000/api/v1/health`
-* **Documentación Interactiva (Swagger):** `http://localhost:8000/docs`
+- **API Base:** `http://localhost:8000`
+- **Health Check:** `http://localhost:8000/api/v1/health`
+- **Documentación Interactiva (Swagger):** `http://localhost:8000/docs`
 
 ---
 
@@ -213,14 +214,16 @@ pytest
 
 ## 🔒 Configuración de Seguridad y TLS (DevSecOps)
 
-Una vez completados los pasos de instalación base, es obligatorio configurar el entorno de desarrollo local con conexiones cifradas (HTTPS/TLS) para cumplir con los estándares del proyecto.
+La configuración HTTPS/TLS local es opcional. El inicio rápido con Docker Compose utiliza HTTP para la aplicación y una conexión local a PostgreSQL con `sslmode=disable`. Para probar HTTPS en el servidor de desarrollo, puedes seguir los pasos de `mkcert` que aparecen a continuación.
 
 ### 1. Protección de Base de Datos y PII
-*   **Cifrado de Datos (PII):** La base de datos tiene habilitada la extensión `pgcrypto` para encriptar campos de información personal.
-*   **Conexión TLS requerida:** La variable `DATABASE_URL` en el archivo `docker-compose.yml` ya incluye el parámetro `?sslmode=require`. Esto obliga a que la comunicación entre la API y PostgreSQL viaje completamente encriptada.
 
-### 2. Generar Certificados Locales para la API
-Para que la API corra bajo HTTPS en local, instala `mkcert` (abre PowerShell como administrador para esta primera vez):
+- **Cifrado de Datos (PII):** La base de datos tiene habilitada la extensión `pgcrypto` para encriptar campos de información personal.
+- **Conexión a PostgreSQL:** En Docker Compose local, las variables `DATABASE_URL` y `MIGRATION_DATABASE_URL` apuntan al servicio `db` y utilizan `sslmode=disable`. Esto corresponde a la conexión local del entorno de demostración. Para una base de datos remota que requiera TLS, se debe utilizar la configuración de conexión segura correspondiente, por ejemplo `sslmode=require` cuando el proveedor y el entorno lo admitan.
+
+### 2. Generar Certificados Locales para la API (Opcional)
+
+Si quieres probar la API bajo HTTPS en local, instala `mkcert` (abre PowerShell como administrador para esta primera vez):
 
 ```powershell
 winget install mkcert
@@ -233,45 +236,33 @@ Luego, abre una terminal normal, asegúrate de estar en la carpeta del backend y
 cd backend
 mkcert localhost 127.0.0.1
 ```
+
 *(Nota: Se crearán los archivos `localhost+1.pem` y `localhost+1-key.pem`. Estos nunca deben subirse al repositorio).*
 
 ### 3. Levantar el Servidor Seguro (HTTPS)
-En lugar del comando del paso 6, arranca el servidor apuntando a las llaves que acabas de crear:
+
+Si deseas probar HTTPS local, en lugar del comando HTTP del paso 6, arranca el servidor apuntando a las llaves que acabas de crear:
 
 ```powershell
 uvicorn app.main:app --reload --ssl-keyfile="localhost+1-key.pem" --ssl-certfile="localhost+1.pem"
 ```
-✅ **Verificación:** Ingresa a `https://127.0.0.1:8000/docs`. Deberás ver el candado cerrado en el navegador, confirmando que tu entorno seguro está activo.
+
+✅ **Verificación:** Ingresa a `https://127.0.0.1:8000/docs`. Deberás ver el candado cerrado en el navegador, confirmando que tu entorno HTTPS está activo.
 
 ## 🔐 Login y roles (S09-1)
 
-- **Variables nuevas** (en `.env`, que no se sube al repo): `JWT_SECRET` (obligatoria, clave larga y
-  aleatoria, p. ej. `openssl rand -hex 32`), `JWT_EXPIRE_MINUTES` (por defecto 60) y `COOKIE_SECURE`
-  (`true` en producción con HTTPS; `false` en `http://localhost`).
-- **Migración:** `alembic upgrade head` (necesita `DATABASE_URL` y `APP_ENCRYPTION_KEY`) agrega
-  `usuario_staff.password_hash` y crea 3 usuarios de **demostración**, todos con la contraseña
-  `Demo-2026!` (se puede cambiar con `DEMO_PASSWORD` antes de migrar):
-  `enfermero@meditriage.test`, `medico@meditriage.test`, `auditor@meditriage.test`.
-  No usarlos en producción.
-- **API:** `POST /api/v1/auth/login` (token en el cuerpo y en la cookie httpOnly `access_token`),
-  `GET /api/v1/auth/me`, `POST /api/v1/auth/logout`. Todos los endpoints, salvo `/health` y el login,
-  exigen la cookie o `Authorization: Bearer <token>`. `usuario_id` sale del token.
+- **Variables nuevas** (en `.env`, que no se sube al repo): `JWT_SECRET` (obligatoria, clave larga y aleatoria, p. ej. `openssl rand -hex 32`), `JWT_EXPIRE_MINUTES` (por defecto 60) y `COOKIE_SECURE` (`true` en producción con HTTPS; `false` en `http://localhost`).
+- **Migración:** `alembic upgrade head` (necesita `DATABASE_URL` y `APP_ENCRYPTION_KEY`) agrega `usuario_staff.password_hash` y crea 3 usuarios de **demostración**, todos con la contraseña `Demo-2026!` (se puede cambiar con `DEMO_PASSWORD` antes de migrar): `enfermero@meditriage.test`, `medico@meditriage.test`, `auditor@meditriage.test`. No usarlos en producción.
+- **API:** `POST /api/v1/auth/login` (token en el cuerpo y en la cookie httpOnly `access_token`), `GET /api/v1/auth/me`, `POST /api/v1/auth/logout`. Todos los endpoints, salvo `/health` y el login, exigen la cookie o `Authorization: Bearer <token>`. `usuario_id` sale del token.
 - **Frontend:** pantalla `/login`; `/nurse`, `/doctor` y `/auditor` solo abren con su rol.
 
 ## 🛡️ Endurecimiento de la API (S11-1)
 
-- **Límite de peticiones:** `POST /auth/login` por IP (`RATE_LIMIT_LOGIN`, por defecto `10/minute`) y
-  `/triage/*` por usuario (`RATE_LIMIT_TRIAGE`, por defecto `120/minute`). Al superarlo la API responde
-  **429** con `Retry-After`. `RATE_LIMIT_ENABLED=false` lo apaga (por ejemplo, en pruebas de carga).
-  Los contadores están en memoria de cada proceso: con varias réplicas el límite efectivo se multiplica.
-- **IP detrás de proxies:** por defecto se usa la IP de la conexión y se ignora `X-Forwarded-For`.
-  Si hay proxies de confianza delante (Ingress, rewrite de Next), indicar cuántos en `TRUSTED_PROXY_HOPS`.
-- **Headers de seguridad** en todas las respuestas (`app/core/seguridad_http.py`): CSP,
-  `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy` y HSTS
-  (este último no se envía con `ENVIRONMENT=development`).
+- **Límite de peticiones:** `POST /auth/login` por IP (`RATE_LIMIT_LOGIN`, por defecto `10/minute`) y `/triage/*` por usuario (`RATE_LIMIT_TRIAGE`, por defecto `120/minute`). Al superarlo la API responde **429** con `Retry-After`. `RATE_LIMIT_ENABLED=false` lo apaga (por ejemplo, en pruebas de carga). Los contadores están en memoria de cada proceso: con varias réplicas el límite efectivo se multiplica.
+- **IP detrás de proxies:** por defecto se usa la IP de la conexión y se ignora `X-Forwarded-For`. Si hay proxies de confianza delante (Ingress, rewrite de Next), indicar cuántos en `TRUSTED_PROXY_HOPS`.
+- **Headers de seguridad** en todas las respuestas (`app/core/seguridad_http.py`): CSP, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy` y HSTS (este último no se envía con `ENVIRONMENT=development`).
 - **CORS:** solo los orígenes de `CORS_ORIGINS` (por defecto `http://localhost:3000`). `*` no se admite.
-- **Recarga automática:** `python app/main.py` solo usa `reload` con `ENVIRONMENT=development`.
-  El contenedor arranca con `uvicorn` sin `--reload`.
+- **Recarga automática:** `python app/main.py` solo usa `reload` con `ENVIRONMENT=development`. El contenedor arranca con `uvicorn` sin `--reload`.
 
 ## 🔒 Prohibición de Mocks Locales (Dev/prod parity)
 
@@ -279,9 +270,9 @@ Para mantener la consistencia entre los entornos de desarrollo y producción, es
 
 ### 1. Uso obligatorio de servicios reales
 
-* **PostgreSQL:** Se prohíbe utilizar SQLite o bases de datos en memoria como reemplazo de PostgreSQL.
-* **Redis:** Se prohíbe sustituir Redis por diccionarios, variables globales u otros mecanismos de almacenamiento local.
-* **Servicios simulados:** No se deben utilizar implementaciones simuladas que oculten errores de conexión o diferencias de comportamiento durante el desarrollo integrado.
+- **PostgreSQL:** Se prohíbe utilizar SQLite o bases de datos en memoria como reemplazo de PostgreSQL.
+- **Redis:** Se prohíbe sustituir Redis por diccionarios, variables globales u otros mecanismos de almacenamiento local.
+- **Servicios simulados:** No se deben utilizar implementaciones simuladas que oculten errores de conexión o diferencias de comportamiento durante el desarrollo integrado.
 
 ### 2. Configuración del entorno de desarrollo
 
@@ -325,10 +316,10 @@ docker compose exec redis redis-cli ping
 
 ### 4. Manejo de errores de conexión
 
-* **Variables de entorno:** Verificar que `DATABASE_URL` y `REDIS_URL` tengan los valores correctos.
-* **Contenedores:** Comprobar que los servicios estén en ejecución.
-* **Configuración:** Revisar credenciales, puertos y redes de Docker Compose.
-* **Corrección de errores:** Los problemas de conexión deben solucionarse en el entorno integrado, sin sustituir PostgreSQL por SQLite ni Redis por almacenamiento en memoria.
+- **Variables de entorno:** Verificar que `DATABASE_URL` y `REDIS_URL` tengan los valores correctos.
+- **Contenedores:** Comprobar que los servicios estén en ejecución.
+- **Configuración:** Revisar credenciales, puertos y redes de Docker Compose.
+- **Corrección de errores:** Los problemas de conexión deben solucionarse en el entorno integrado, sin sustituir PostgreSQL por SQLite ni Redis por almacenamiento en memoria.
 
 ### 5. Uso de mocks en pruebas
 
@@ -384,6 +375,7 @@ Estado final del namespace (`kubectl get all -n triageops`):
 La promoción a producción será manual mediante Pull Request (PR) en el repositorio triageops-ts/triageops-gitops. El pipeline de la aplicación publica la imagen y actualiza automáticamente solo overlays/dev; no debe modificar overlays/prod.
 
 **Procedimiento de promoción**
+
 1. Confirmar que el workflow de triageops-ts/Equipo---MediTriage terminó correctamente en main y publicó ghcr.io/triageops-ts/meditriage-backend:<commit-sha>.
 2. Confirmar que ese tag quedó actualizado en overlays/dev/kustomization.yaml y que Argo CD para dev está Synced y Healthy.
 3. Crear una rama en triageops-ts/triageops-gitops y cambiar únicamente la versión de la imagen en overlays/prod/kustomization.yaml al mismo <commit-sha> verificado en dev. No usar latest.
@@ -396,23 +388,21 @@ La promoción a producción será manual mediante Pull Request (PR) en el reposi
 Si la verificación de producción falla, abrir un PR de reversión que restaure en overlays/prod/kustomization.yaml el último tag conocido como bueno. Después de mergear, comprobar que Argo CD vuelve a sincronizar y que los pods ejecutan esa versión.
 
 **Controles**
+
 - No promover a producción automáticamente desde el job promote de CI.
 - Promover exactamente el SHA que ya fue verificado en dev.
 - Mantener la aprobación humana y el historial del cambio en el PR de GitOps.
 - No guardar tokens ni credenciales en archivos del repositorio.
 
-  ---
+---
 
 ## 🌐 Ambiente de staging
 
 **URL:** https://coherent-mop-voltage.ngrok-free.dev
 
-- Desplegado con Argo CD (Application `meditriage-staging`, overlay `overlays/staging` del repo `triageops-gitops`)
-  con la imagen del CI `2bb5797e5d88e9bac5e06eacd3c7795acce3d077`.
-- Corre en una VM de Azure for Students (k3s + Argo CD, región North Central US): no depende del computador de nadie.
-  La VM se puede apagar para ahorrar crédito; al encenderla, la URL vuelve a responder en 3–5 min.
-- Base de datos propia: branch `staging` de Neon (base `meditriage_staging`). Secretos creados en el namespace
-  `triageops-staging`, nunca en el repo.
+- Desplegado con Argo CD (Application `meditriage-staging`, overlay `overlays/staging` del repo `triageops-gitops`) con la imagen del CI `2bb5797e5d88e9bac5e06eacd3c7795acce3d077`.
+- Corre en una VM de Azure for Students (k3s + Argo CD, región North Central US): no depende del computador de nadie. La VM se puede apagar para ahorrar crédito; al encenderla, la URL vuelve a responder en 3–5 min.
+- Base de datos propia: branch `staging` de Neon (base `meditriage_staging`). Secretos creados en el namespace `triageops-staging`, nunca en el repo.
 - Usuarios demo: mismos correos que en local; la contraseña de staging es distinta (pedirla a Isidora).
 - ngrok gratis muestra una página de aviso: hacer clic en **Visit Site**.
 
@@ -434,23 +424,30 @@ Para editarlo: abrir `docs/c4/l3-componentes.drawio` en [diagrams.net](https://a
 
 ---
 
-## 📸 Evidencia de Integración Continua y GitOps 
+## 📸 Evidencia de Integración Continua y GitOps
 
 A continuación se presenta la evidencia del cumplimiento de los requisitos de GitOps, CI/CD y despliegue automatizado con Argo CD:
 
 ### 1. Flujo de CI Exitoso (`ci.yml`)
+
 El flujo de Integración Continua en GitHub Actions ejecuta las pruebas y compilaciones correctamente en la rama `main`.
+
 ![CI Pipeline Verde](docs/01-ci-pipeline.png)
 
 ### 2. Estructura del Repositorio GitOps
+
 El repositorio `triageops-gitops` cuenta con la estructura clara de manifiestos Kustomize dividida en carpetas `base/` y `overlays/{dev,prod}`.
+
 ![Estructura GitOps](docs/02-gitops-structure.png)
 
 ### 3. Registro de Decisión de Arquitectura (ADR)
+
 Documentación formal de la decisión de arquitectura adoptada para la implementación de GitOps y Argo CD.
+
 ![Registro ADR](docs/03-adr-gitops.png)
 
 ### 4. Estado del Despliegue en Argo CD (Healthy & Synced)
+
 ![Argo CD Healthy and Synced](docs/04-argocd-healthy.png)
 
 ---
